@@ -2,7 +2,6 @@ package buffer
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -35,10 +34,6 @@ func NewBuffer(ctx context.Context, cfg config.BufferConfig) (*Buffer, error) {
 }
 
 func (b *Buffer) Add(data []byte) error {
-	if data == nil {
-		return fmt.Errorf("cannot add nil data")
-	}
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.data = append(b.data, data)
