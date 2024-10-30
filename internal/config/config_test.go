@@ -12,7 +12,6 @@ import (
 func setupEnv(envVars map[string]string) func() {
 	allEnvVars := []string{
 		"NUM_WORKERS",
-		"LOG_LEVEL",
 		"PROJECT_ID",
 		"BUFFER_DURATION",
 		"BUFFER_OFFSET",
@@ -57,7 +56,6 @@ func setupEnv(envVars map[string]string) func() {
 func TestLoadConfig_Success(t *testing.T) {
 	teardown := setupEnv(map[string]string{
 		"NUM_WORKERS":         "4",
-		"LOG_LEVEL":           "DEBUG",
 		"PROJECT_ID":          "test-project",
 		"BUFFER_DURATION":     "10m",
 		"BUFFER_OFFSET":       "2s",
@@ -76,7 +74,6 @@ func TestLoadConfig_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 4, cfg.NumWorkers)
-	assert.Equal(t, "DEBUG", cfg.LogLevel)
 	assert.Equal(t, "test-project", cfg.ProjectID)
 	assert.Equal(t, 10*time.Minute, cfg.Buffer.Duration)
 	assert.Equal(t, 2*time.Second, cfg.Buffer.Offset)
@@ -93,7 +90,6 @@ func TestLoadConfig_Success(t *testing.T) {
 func TestLoadConfig_MissingRequiredEnv(t *testing.T) {
 	teardown := setupEnv(map[string]string{
 		"NUM_WORKERS": "2",
-		"LOG_LEVEL":   "INFO",
 	})
 	defer teardown()
 
@@ -119,7 +115,6 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, cfg.NumWorkers)
-	assert.Equal(t, "INFO", cfg.LogLevel)
 	assert.Equal(t, 5*time.Minute, cfg.Buffer.Duration)
 	assert.Equal(t, 1*time.Second, cfg.Buffer.Offset)
 }
@@ -166,7 +161,6 @@ func TestLoadConfig_OverrideDefaults(t *testing.T) {
 	teardown := setupEnv(map[string]string{
 		"PROJECT_ID":          "test-project",
 		"NUM_WORKERS":         "10",
-		"LOG_LEVEL":           "ERROR",
 		"BUFFER_DURATION":     "15m",
 		"BUFFER_OFFSET":       "5s",
 		"MQTT_HOST":           "mqtt.example.com",
@@ -184,7 +178,6 @@ func TestLoadConfig_OverrideDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 10, cfg.NumWorkers)
-	assert.Equal(t, "ERROR", cfg.LogLevel)
 	assert.Equal(t, 15*time.Minute, cfg.Buffer.Duration)
 	assert.Equal(t, 5*time.Second, cfg.Buffer.Offset)
 	assert.Equal(t, "mqtt.example.com", cfg.MQTT.Host)

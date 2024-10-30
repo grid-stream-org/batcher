@@ -1,7 +1,7 @@
 package config
 
 import (
-	"os"
+	"log"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -12,14 +12,15 @@ type Config struct {
 	MQTT       MQTTConfig   `envconfig:"MQTT"`
 	DB         DBConfig     `envconfig:"DB"`
 	Buffer     BufferConfig `envconfig:"BUFFER"`
+	Logger     LoggerConfig `envconfig:"LOG"`
 	NumWorkers int          `envconfig:"NUM_WORKERS" default:"2"`
-	LogLevel   string       `envconfig:"LOG_LEVEL" default:"INFO"`
 	ProjectID  string       `envconfig:"PROJECT_ID" required:"true"`
 }
 
 type BufferConfig struct {
 	Duration time.Duration `envconfig:"DURATION" default:"5m"`
 	Offset   time.Duration `envconfig:"OFFSET" default:"1s"`
+	Capacity int           `envconfig:"CAPACITY" default:"10"`
 }
 
 type MQTTConfig struct {
@@ -36,9 +37,15 @@ type DBConfig struct {
 	CredsPath string `envconfig:"CREDENTIALS_PATH" required:"true"`
 }
 
+type LoggerConfig struct {
+	Level  string `envconfig:"LEVEL" default:"INFO"`
+	Format string `envconfig:"FORMAT" default:"text"`
+	Output string `envconfig:"OUTPUT" default:"stdout"`
+}
+
 func LoadConfig() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
-		// log
+		log.Printf(".env file not found, proceeding with environment variables")
 	}
 
 	var cfg Config
@@ -52,8 +59,8 @@ func LoadConfig() (*Config, error) {
 func MustLoadConfig() *Config {
 	cfg, err := LoadConfig()
 	if err != nil {
-		// log
-		os.Exit(1)
+		log.Fatalf("Unable to load config: %v", err)
+
 	}
 	return cfg
 }
