@@ -12,7 +12,6 @@ import (
 func setupEnv(envVars map[string]string) func() {
 	allEnvVars := []string{
 		"NUM_WORKERS",
-		"PROJECT_ID",
 		"BUFFER_DURATION",
 		"BUFFER_OFFSET",
 		"MQTT_HOST",
@@ -56,7 +55,6 @@ func setupEnv(envVars map[string]string) func() {
 func TestLoadConfig_Success(t *testing.T) {
 	teardown := setupEnv(map[string]string{
 		"NUM_WORKERS":         "4",
-		"PROJECT_ID":          "test-project",
 		"BUFFER_DURATION":     "10m",
 		"BUFFER_OFFSET":       "2s",
 		"MQTT_HOST":           "localhost",
@@ -70,11 +68,10 @@ func TestLoadConfig_Success(t *testing.T) {
 	})
 	defer teardown()
 
-	cfg, err := LoadConfig()
+	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.Equal(t, 4, cfg.NumWorkers)
-	assert.Equal(t, "test-project", cfg.ProjectID)
 	assert.Equal(t, 10*time.Minute, cfg.Buffer.Duration)
 	assert.Equal(t, 2*time.Second, cfg.Buffer.Offset)
 	assert.Equal(t, "localhost", cfg.MQTT.Host)
@@ -93,13 +90,12 @@ func TestLoadConfig_MissingRequiredEnv(t *testing.T) {
 	})
 	defer teardown()
 
-	_, err := LoadConfig()
+	_, err := Load()
 	assert.Error(t, err)
 }
 
 func TestLoadConfig_DefaultValues(t *testing.T) {
 	teardown := setupEnv(map[string]string{
-		"PROJECT_ID":          "default-project",
 		"MQTT_HOST":           "localhost",
 		"MQTT_PORT":           "1883",
 		"MQTT_USERNAME":       "user",
@@ -111,7 +107,7 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 	})
 	defer teardown()
 
-	cfg, err := LoadConfig()
+	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, cfg.NumWorkers)
@@ -121,7 +117,6 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 
 func TestLoadConfig_InvalidDuration(t *testing.T) {
 	teardown := setupEnv(map[string]string{
-		"PROJECT_ID":          "test-project",
 		"MQTT_HOST":           "localhost",
 		"MQTT_PORT":           "1883",
 		"MQTT_USERNAME":       "user",
@@ -134,13 +129,12 @@ func TestLoadConfig_InvalidDuration(t *testing.T) {
 	})
 	defer teardown()
 
-	_, err := LoadConfig()
+	_, err := Load()
 	require.Error(t, err)
 }
 
 func TestLoadConfig_EmptyDuration(t *testing.T) {
 	teardown := setupEnv(map[string]string{
-		"PROJECT_ID":          "test-project",
 		"MQTT_HOST":           "localhost",
 		"MQTT_PORT":           "1883",
 		"MQTT_USERNAME":       "user",
@@ -153,13 +147,12 @@ func TestLoadConfig_EmptyDuration(t *testing.T) {
 	})
 	defer teardown()
 
-	_, err := LoadConfig()
+	_, err := Load()
 	require.Error(t, err)
 }
 
 func TestLoadConfig_OverrideDefaults(t *testing.T) {
 	teardown := setupEnv(map[string]string{
-		"PROJECT_ID":          "test-project",
 		"NUM_WORKERS":         "10",
 		"BUFFER_DURATION":     "15m",
 		"BUFFER_OFFSET":       "5s",
@@ -174,7 +167,7 @@ func TestLoadConfig_OverrideDefaults(t *testing.T) {
 	})
 	defer teardown()
 
-	cfg, err := LoadConfig()
+	cfg, err := Load()
 	require.NoError(t, err)
 
 	assert.Equal(t, 10, cfg.NumWorkers)
@@ -188,7 +181,6 @@ func TestLoadConfig_OverrideDefaults(t *testing.T) {
 
 func TestLoadConfig_InvalidPort(t *testing.T) {
 	teardown := setupEnv(map[string]string{
-		"PROJECT_ID":          "test-project",
 		"MQTT_HOST":           "localhost",
 		"MQTT_PORT":           "invalid",
 		"MQTT_USERNAME":       "user",
@@ -200,6 +192,6 @@ func TestLoadConfig_InvalidPort(t *testing.T) {
 	})
 	defer teardown()
 
-	_, err := LoadConfig()
+	_, err := Load()
 	require.Error(t, err)
 }

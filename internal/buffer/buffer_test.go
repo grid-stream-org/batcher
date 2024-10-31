@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const testTimeout = 500 * time.Millisecond
+
 func TestNewBuffer(t *testing.T) {
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
@@ -44,7 +46,10 @@ func TestNewBuffer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b, err := NewBuffer(context.Background(), &tt.cfg, testLogger)
+			ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+			defer cancel()
+
+			b, err := New(ctx, &tt.cfg, testLogger)
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, b)
@@ -58,10 +63,13 @@ func TestNewBuffer(t *testing.T) {
 }
 
 func TestBuffer_Add(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	b, err := NewBuffer(context.Background(), &config.BufferConfig{
+	b, err := New(ctx, &config.BufferConfig{
 		Duration: 100 * time.Millisecond,
 		Offset:   10 * time.Millisecond,
 		Capacity: 10,
@@ -79,6 +87,11 @@ func TestBuffer_Add(t *testing.T) {
 			data:    []byte("test data"),
 			wantErr: false,
 		},
+		{
+			name:    "empty data",
+			data:    []byte{},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,16 +101,21 @@ func TestBuffer_Add(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				// Verify metrics
+				assert.Greater(t, b.metrics.MessagesCount, int64(0))
 			}
 		})
 	}
 }
 
 func TestBuffer_Flush(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	b, err := NewBuffer(context.Background(), &config.BufferConfig{
+	b, err := New(ctx, &config.BufferConfig{
 		Duration: 100 * time.Millisecond,
 		Offset:   10 * time.Millisecond,
 		Capacity: 10,
@@ -106,7 +124,7 @@ func TestBuffer_Flush(t *testing.T) {
 	defer b.Stop()
 
 	t.Run("flush empty buffer", func(t *testing.T) {
-		b.Flush()
+		b.flush()
 		select {
 		case data := <-b.FlushedData():
 			t.Fatalf("Expected no data, but got: %v", data)
@@ -120,12 +138,14 @@ func TestBuffer_Flush(t *testing.T) {
 		err := b.Add(testData)
 		require.NoError(t, err)
 
-		b.Flush()
+		b.flush()
 
 		select {
 		case data := <-b.FlushedData():
 			assert.Len(t, data, 1)
 			assert.Equal(t, testData, data[0])
+			assert.Greater(t, b.metrics.FlushCount, int64(0))
+			assert.False(t, b.metrics.LastFlushTime.IsZero())
 		case <-time.After(50 * time.Millisecond):
 			t.Fatal("Expected flushed data, but none received")
 		}
@@ -133,11 +153,14 @@ func TestBuffer_Flush(t *testing.T) {
 }
 
 func TestBuffer_AutoFlush(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
 	duration := 100 * time.Millisecond
-	b, err := NewBuffer(context.Background(), &config.BufferConfig{
+	b, err := New(ctx, &config.BufferConfig{
 		Duration: duration,
 		Offset:   10 * time.Millisecond,
 		Capacity: 10,
@@ -159,37 +182,51 @@ func TestBuffer_AutoFlush(t *testing.T) {
 }
 
 func TestBuffer_Stop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	ctx := context.Background()
-	b, err := NewBuffer(ctx, &config.BufferConfig{
+	b, err := New(ctx, &config.BufferConfig{
 		Duration: 100 * time.Millisecond,
 		Offset:   10 * time.Millisecond,
 		Capacity: 10,
 	}, testLogger)
 	require.NoError(t, err)
 
+	// Add test data
 	err = b.Add([]byte("test data"))
 	require.NoError(t, err)
 
+	// Start a goroutine to read flushed data
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range b.FlushedData() {
+			// Drain the channel
+		}
+	}()
+
 	b.Stop()
 
-	// Drain any remaining data
-	for range b.FlushedData() {
-		// Optionally, you can check the data here
+	// Wait for reader to finish
+	select {
+	case <-done:
+		// Success
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timeout waiting for buffer to stop")
 	}
-
-	// Verify the channel is closed
-	_, ok := <-b.FlushedData()
-	assert.False(t, ok, "Expected the flushed data channel to be closed")
 }
 
 func TestBuffer_ConcurrentAccess(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}))
-	b, err := NewBuffer(context.Background(), &config.BufferConfig{
+	b, err := New(ctx, &config.BufferConfig{
 		Duration: 100 * time.Millisecond,
 		Offset:   10 * time.Millisecond,
 		Capacity: 10,
@@ -214,8 +251,7 @@ func TestBuffer_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	b.Flush()
+	b.flush()
 
 	select {
 	case data := <-b.FlushedData():

@@ -4,8 +4,15 @@ import (
 	"log"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+)
+
+var (
+	ErrDurationGreater = errors.New("buffer duration must be greater than offset")
+	ErrNeedPartition   = errors.New("num_partitions must be positive when partition_mode is enabled")
 )
 
 type Config struct {
@@ -14,7 +21,6 @@ type Config struct {
 	Buffer     BufferConfig `envconfig:"BUFFER"`
 	Logger     LoggerConfig `envconfig:"LOG"`
 	NumWorkers int          `envconfig:"NUM_WORKERS" default:"2"`
-	ProjectID  string       `envconfig:"PROJECT_ID" required:"true"`
 }
 
 type BufferConfig struct {
@@ -24,10 +30,18 @@ type BufferConfig struct {
 }
 
 type MQTTConfig struct {
-	Host     string `envconfig:"HOST" required:"true"`
-	Port     int    `envconfig:"PORT" required:"true"`
-	Username string `envconfig:"USERNAME" required:"true"`
-	Password string `envconfig:"PASSWORD" required:"true"`
+	Host          string `envconfig:"HOST" required:"true"`
+	Port          int    `envconfig:"PORT" required:"true"`
+	Username      string `envconfig:"USERNAME" required:"true"`
+	Password      string `envconfig:"PASSWORD" required:"true"`
+	QOS           int    `envconfig:"QOS" default:"1"`
+	UseTLS        bool   `envconfig:"USE_TLS" default:"false"`
+	CertFile      string `envconfig:"CERT_FILE"`
+	KeyFile       string `envconfig:"KEY_FILE"`
+	CAFile        string `envconfig:"CA_FILE"`
+	PartitionMode bool   `envconfig:"PARTITION_MODE" default:"false"`
+	Partition     int    `envconfig:"PARTITION" default:"0"`
+	NumPartitions int    `envconfig:"NUM_PARTITIONS" default:"1"`
 }
 
 type DBConfig struct {
@@ -43,7 +57,7 @@ type LoggerConfig struct {
 	Output string `envconfig:"OUTPUT" default:"stdout"`
 }
 
-func LoadConfig() (*Config, error) {
+func Load() (*Config, error) {
 	if err := godotenv.Load(); err != nil {
 		log.Printf(".env file not found, proceeding with environment variables")
 	}
@@ -53,14 +67,21 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 
+	if err := validate(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
 
-func MustLoadConfig() *Config {
-	cfg, err := LoadConfig()
-	if err != nil {
-		log.Fatalf("Unable to load config: %v", err)
-
+func validate(cfg *Config) error {
+	if cfg.Buffer.Duration <= cfg.Buffer.Offset {
+		return ErrDurationGreater
 	}
-	return cfg
+
+	if cfg.MQTT.PartitionMode && cfg.MQTT.NumPartitions <= 0 {
+		return ErrNeedPartition
+	}
+
+	return nil
 }

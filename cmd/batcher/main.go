@@ -2,58 +2,62 @@ package batcher
 
 import (
 	"context"
-	"log/slog"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/pkg/errors"
+
 	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/logger"
+	"github.com/grid-stream-org/batcher/internal/mqtt"
 )
 
 func main() {
-	// Load config
-	cfg := config.MustLoadConfig()
-
-	// Initialize logger
-	logger.InitLogger(&cfg.Logger, nil)
-	log := logger.Logger()
-
-	// Create context with cancellation for shutdown handling
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Initialize the buffer
-	buf, err := buffer.NewBuffer(ctx, &cfg.Buffer, log)
-	if err != nil {
-		log.Error("Failed to initialize buffer", "error", err)
+	ctx := context.Background()
+	if err := run(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
-
-	// Run service
-	if err := run(ctx, buf, log); err != nil {
-		log.Error("Run failed", "error", err)
-		os.Exit(1)
-	}
-
-	// Handle graceful shutdown
-	handleShutdown(cancel, buf, log)
 }
 
-func run(ctx context.Context, buf *buffer.Buffer, log *slog.Logger) error {
+func run(ctx context.Context) error {
+	// Set up signal handling with context
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+
+	// Load config
+	cfg, err := config.Load()
+	if err != nil {
+		return errors.Wrap(err, "loading config")
+	}
+
+	// Initialize logger
+	log, err := logger.Init(&cfg.Logger, nil)
+	if err != nil {
+		return errors.Wrap(err, "initializing logger")
+	}
+
+	// Initialize the buffer
+	buf, err := buffer.New(ctx, &cfg.Buffer, log)
+	if err != nil {
+		return errors.Wrap(err, "initializing buffer")
+	}
+	defer buf.Stop()
+
+	// Initialize MQTT client
+	mqtt, err := mqtt.NewClient(ctx, &cfg.MQTT, buf, log)
+	if err != nil {
+		return errors.Wrap(err, "initializing mqtt client")
+	}
+	defer mqtt.Stop()
+
+	// Wait for shutdown signal
 	log.Info("Application is running...")
 	<-ctx.Done()
 
+	log.Info("Shutting down...")
 	return nil
-}
-
-func handleShutdown(cancel context.CancelFunc, buf *buffer.Buffer, log *slog.Logger) {
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-sigs
-	log.Info("Received signal, initiating shutdown", "signal", sig)
-	cancel()
-	buf.Stop()
-	log.Info("Shutdown complete")
 }

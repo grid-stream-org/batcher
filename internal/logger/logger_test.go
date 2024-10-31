@@ -13,21 +13,17 @@ import (
 )
 
 func TestLogger_NotNilAfterInitialization(t *testing.T) {
-	logger.Reset()
-
 	cfg := &config.LoggerConfig{
 		Level:  "DEBUG",
 		Format: "text",
 		Output: "stdout",
 	}
-	logger.InitLogger(cfg, nil)
-
-	log := logger.Logger()
+	log, err := logger.Init(cfg, nil)
+	require.NoError(t, err)
 	require.NotNil(t, log, "Logger should not be nil after initialization")
 }
 
 func TestLogger_LoggingAtDifferentLevels(t *testing.T) {
-	logger.Reset()
 
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
@@ -38,9 +34,8 @@ func TestLogger_LoggingAtDifferentLevels(t *testing.T) {
 		Format: "text",
 		Output: "",
 	}
-	logger.InitLogger(cfg, w)
-
-	log := logger.Logger()
+	log, err := logger.Init(cfg, w)
+	require.NoError(t, err)
 
 	log.Debug("Debug message")
 	log.Info("Info message")
