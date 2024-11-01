@@ -4,23 +4,17 @@ import (
 	"context"
 	"log/slog"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
 
 	"github.com/grid-stream-org/batcher/internal/config"
+	"github.com/grid-stream-org/batcher/metrics"
 )
 
 var (
 	ErrDurationGreater = errors.New("duration must be greater than offset")
 )
-
-type Metrics struct {
-	MessagesCount int64
-	FlushCount    int64
-	LastFlushTime time.Time
-}
 
 type Buffer struct {
 	mu      sync.Mutex
@@ -29,7 +23,6 @@ type Buffer struct {
 	ticker  *time.Ticker
 	wg      sync.WaitGroup
 	log     *slog.Logger
-	metrics Metrics
 }
 
 func New(ctx context.Context, cfg *config.BufferConfig, log *slog.Logger) (*Buffer, error) {
@@ -50,18 +43,18 @@ func New(ctx context.Context, cfg *config.BufferConfig, log *slog.Logger) (*Buff
 	return b, nil
 }
 
-func (b *Buffer) Add(data []byte) error {
+func (b *Buffer) Add(data []byte) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.data = append(b.data, data)
-	atomic.AddInt64(&b.metrics.MessagesCount, 1)
 
-	b.log.Debug("Data added to buffer", "buffer_size", len(b.data))
-	return nil
+	metrics.Local.Gauge(metrics.BufferSize).WithLabelValues().Set(float64(len(b.data)))
+	b.log.Debug("Record added to buffer", "buffer_size", len(b.data))
 }
 
 func (b *Buffer) flush() {
+	b.log.Info("Flushing buffer")
 	b.mu.Lock()
 	if len(b.data) == 0 {
 		b.mu.Unlock()
@@ -75,20 +68,24 @@ func (b *Buffer) flush() {
 	// Blocking send to ensure no data loss
 	b.flushCh <- data
 
-	atomic.AddInt64(&b.metrics.FlushCount, 1)
-	b.metrics.LastFlushTime = time.Now()
+	metrics.Local.Counter(metrics.FlushCount).WithLabelValues().Inc()
+	metrics.Local.Gauge(metrics.LastFlushTime).WithLabelValues().SetToCurrentTime()
+	metrics.Local.Gauge(metrics.BufferSize).WithLabelValues().Set(0)
 
 	b.log.Info("Buffer flushed", "records", len(data))
 }
 
 func (b *Buffer) autoFlush(ctx context.Context) {
+	b.log.Info("Starting auto flush")
 	defer b.wg.Done()
 
 	for {
 		select {
 		case <-ctx.Done():
+			b.log.Info("Finishing auto flush")
 			return
 		case <-b.ticker.C:
+
 			b.flush()
 		}
 	}

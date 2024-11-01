@@ -49,5 +49,9 @@ func Init(cfg *config.LoggerConfig, outputWriter io.Writer) (*slog.Logger, error
 		handler = slog.NewTextHandler(output, &slog.HandlerOptions{Level: level})
 	}
 
-	return slog.New(handler), nil
+	log := slog.New(handler)
+
+	log.Debug("Logger initialized successfully", "level", cfg.Level, "format", cfg.Format, "output", cfg.Output)
+
+	return log, nil
 }

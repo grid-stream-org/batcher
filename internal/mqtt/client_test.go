@@ -115,7 +115,8 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := createClientOptions(&tt.cfg, setupTestLogger())
+			opts, err := createClientOptions(&tt.cfg, setupTestLogger())
+			assert.NoError(t, err)
 
 			assert.NotNil(t, opts)
 
@@ -142,9 +143,6 @@ func TestClient_HandleMessage(t *testing.T) {
 	client := &Client{
 		buffer: buf,
 		log:    setupTestLogger(),
-		metrics: &Metrics{
-			ActiveProjects: make(map[string]time.Time),
-		},
 	}
 
 	tests := []struct {
@@ -199,47 +197,9 @@ func TestClient_HandleMessage(t *testing.T) {
 				topic:   "projects/test/data",
 			}
 
-			initialDropped := client.metrics.MessagesDropped
-			initialReceived := client.metrics.MessagesReceived
-
 			client.handleMessage(nil, msg)
-
-			if tt.expectDropped {
-				assert.Equal(t, initialDropped+1, client.metrics.MessagesDropped)
-			} else {
-				assert.Equal(t, initialDropped, client.metrics.MessagesDropped)
-			}
-
-			if tt.expectBuffered {
-				assert.Equal(t, initialReceived+1, client.metrics.MessagesReceived)
-				if len(tt.payload) > 0 {
-					assert.Contains(t, client.metrics.ActiveProjects, tt.payload[0].ProjectID)
-				}
-			}
 		})
 	}
-}
-
-func TestClient_ProjectCleanup(t *testing.T) {
-	client := &Client{
-		metrics: &Metrics{
-			ActiveProjects: make(map[string]time.Time),
-		},
-	}
-
-	// Add some projects with different timestamps
-	oldTime := time.Now().Add(-2 * time.Hour)
-	newTime := time.Now()
-
-	client.metrics.ActiveProjects["old_project"] = oldTime
-	client.metrics.ActiveProjects["new_project"] = newTime
-
-	// Run cleanup
-	client.cleanupProjects()
-
-	// Check results
-	assert.NotContains(t, client.metrics.ActiveProjects, "old_project", "Old project should be cleaned up")
-	assert.Contains(t, client.metrics.ActiveProjects, "new_project", "New project should be retained")
 }
 
 func TestGetTopic(t *testing.T) {
@@ -293,7 +253,8 @@ func TestCreateClientOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := createClientOptions(&tt.cfg, logger)
+			opts, err := createClientOptions(&tt.cfg, logger)
+			assert.NoError(t, err)
 			assert.NotNil(t, opts)
 			assert.True(t, opts.AutoReconnect)
 			assert.True(t, opts.CleanSession)

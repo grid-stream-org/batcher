@@ -2,18 +2,21 @@ package mqtt
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync/atomic"
+	"os"
 	"time"
-
-	"github.com/pkg/errors"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
+	"github.com/grid-stream-org/batcher/metrics"
+	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type DER struct {
@@ -30,55 +33,47 @@ type DER struct {
 	CurrentSoc        int       `json:"currentSoc"`
 }
 
-type Metrics struct {
-	MessagesReceived int64
-	MessagesDropped  int64
-	ConnectedAt      time.Time
-	LastMessageAt    time.Time
-	ActiveProjects   map[string]time.Time // projectID -> last seen
-}
-
 type Client struct {
-	client  mqtt.Client
-	buffer  *buffer.Buffer
-	topic   string
-	cfg     *config.MQTTConfig
-	log     *slog.Logger
-	metrics *Metrics
+	client mqtt.Client
+	buffer *buffer.Buffer
+	topic  string
+	cfg    *config.MQTTConfig
+	log    *slog.Logger
 }
 
 func NewClient(ctx context.Context, cfg *config.MQTTConfig, buf *buffer.Buffer, log *slog.Logger) (*Client, error) {
-	opts := createClientOptions(cfg, log)
-
-	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return nil, errors.Wrap(token.Error(), "connecting to broker")
-	}
-
 	m := &Client{
-		client: client,
 		buffer: buf,
 		topic:  getTopic(cfg),
 		cfg:    cfg,
 		log:    log.With("component", "mqtt"),
-		metrics: &Metrics{
-			ConnectedAt:    time.Now(),
-			ActiveProjects: make(map[string]time.Time),
-		},
+	}
+
+	opts, err := createClientOptions(cfg, log)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating client options")
+	}
+
+	m.client = mqtt.NewClient(opts)
+	m.log.Debug("Attempting to connect to MQTT broker...")
+
+	if token := m.client.Connect(); token.Wait() && token.Error() != nil {
+		log.Error("Error connecting to MQTT client", "error", err)
+		return nil, errors.Wrap(token.Error(), "error connecting to broker")
 	}
 
 	if err := m.subscribe(); err != nil {
-		client.Disconnect(250)
+		m.client.Disconnect(250)
 		return nil, errors.Wrap(err, "subscribing to topics")
 	}
-
 	return m, nil
 }
 
-func createClientOptions(cfg *config.MQTTConfig, log *slog.Logger) *mqtt.ClientOptions {
+func createClientOptions(cfg *config.MQTTConfig, log *slog.Logger) (*mqtt.ClientOptions, error) {
 	clientID := fmt.Sprintf("batcher-%s", uuid.NewString())
-	brokerURL := fmt.Sprintf("ssl://%s:%d", cfg.Host, cfg.Port)
+	brokerURL := fmt.Sprintf("tls://%s:%d", cfg.Host, cfg.Port)
 
+	log.Debug("Creating client options", "client_id", clientID, "broker", brokerURL)
 	opts := mqtt.NewClientOptions().
 		AddBroker(brokerURL).
 		SetClientID(clientID).
@@ -86,102 +81,95 @@ func createClientOptions(cfg *config.MQTTConfig, log *slog.Logger) *mqtt.ClientO
 		SetPassword(cfg.Password).
 		SetCleanSession(true).
 		SetAutoReconnect(true).
-		SetConnectRetry(true).
-		SetConnectRetryInterval(5 * time.Second).
+		SetProtocolVersion(4).
+		SetConnectTimeout(10 * time.Second).
 		SetKeepAlive(30 * time.Second).
-		SetMaxReconnectInterval(5 * time.Minute).
 		SetWriteTimeout(10 * time.Second).
 		SetOnConnectHandler(func(c mqtt.Client) {
-			log.Info("Connected to MQTT broker",
-				"client_id", clientID,
-				"broker", cfg.Host)
+			metrics.Local.Gauge(metrics.ConnectionStatus).WithLabelValues().Set(1)
+			log.Info("Connected to MQTT broker", "client_id", clientID)
 		}).
 		SetConnectionLostHandler(func(c mqtt.Client, err error) {
+			metrics.Local.Gauge(metrics.ConnectionStatus).WithLabelValues().Set(0)
 			log.Error("Lost connection to MQTT broker", "error", err)
 		}).
 		SetReconnectingHandler(func(c mqtt.Client, options *mqtt.ClientOptions) {
 			log.Warn("Attempting to reconnect to MQTT broker")
 		})
 
-	return opts
-}
-
-func (c *Client) subscribe() error {
-	token := c.client.Subscribe(c.topic, byte(c.cfg.QOS), c.handleMessage)
-	if token.Wait() && token.Error() != nil {
-		return errors.Wrapf(token.Error(), "subscribing to topic %s", c.topic)
+	tlsCfg := &tls.Config{
+		InsecureSkipVerify: cfg.SkipVerify,
 	}
 
-	c.log.Info("Subscribed to topic pattern",
-		"topic", c.topic,
-		"partition_mode", c.cfg.PartitionMode,
-		"partition", c.cfg.Partition)
+	if cfg.SkipVerify {
+		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "loading client certificates")
+		}
+		tlsCfg.Certificates = []tls.Certificate{cert}
 
+		caCert, err := os.ReadFile(cfg.CAFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "loading CA certificate")
+		}
+
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM(caCert) {
+			return nil, errors.New("failed to parse CA certificate")
+		}
+		tlsCfg.RootCAs = caCertPool
+	}
+	opts.SetTLSConfig(tlsCfg)
+
+	return opts, nil
+}
+
+func (m *Client) subscribe() error {
+	m.log.Debug("Subscribing to topic", "topic", m.topic)
+	token := m.client.Subscribe(m.topic, byte(m.cfg.QOS), m.handleMessage)
+	if token.Wait() && token.Error() != nil {
+		return errors.Wrapf(token.Error(), "subscribing to topic %s", m.topic)
+	}
+
+	m.log.Info("Successfully subscribed to topic", "topic", m.topic, "QOS Level", m.cfg.QOS)
 	return nil
 }
 
 func getTopic(cfg *config.MQTTConfig) string {
-	if !cfg.PartitionMode {
-		return "projects/+/data"
+	if cfg.PartitionMode {
+		return fmt.Sprintf("projects/%d/+/data", cfg.Partition)
 	}
-	return fmt.Sprintf("projects/%d/+/data", cfg.Partition)
+	return "projects/+/data"
 }
 
 func (c *Client) handleMessage(_ mqtt.Client, msg mqtt.Message) {
-	atomic.AddInt64(&c.metrics.MessagesReceived, 1)
-	c.metrics.LastMessageAt = time.Now()
+	c.log.Debug("Message received", "topic", msg.Topic(), "payload_size", len(msg.Payload()))
 
 	var ders []DER
 	if err := json.Unmarshal(msg.Payload(), &ders); err != nil {
-		atomic.AddInt64(&c.metrics.MessagesDropped, 1)
-		c.log.Error("Failed to parse message payload",
-			"error", err,
-			"topic", msg.Topic())
+		metrics.Local.Counter(metrics.MessagesDropped).With(prometheus.Labels{"topic": c.topic, "error": "parse_error"}).Inc()
+		c.log.Error("Failed to parse message payload", "error", err, "topic", msg.Topic())
 		return
 	}
 
 	if len(ders) == 0 {
-		atomic.AddInt64(&c.metrics.MessagesDropped, 1)
+		metrics.Local.Counter(metrics.MessagesDropped).With(prometheus.Labels{"topic": c.topic, "error": "empty_payload"}).Inc()
 		c.log.Warn("Received empty DER array", "topic", msg.Topic())
 		return
 	}
 
+	c.buffer.Add(msg.Payload())
 	projectID := ders[0].ProjectID
-	c.updateProject(projectID)
-
-	if err := c.buffer.Add(msg.Payload()); err != nil {
-		atomic.AddInt64(&c.metrics.MessagesDropped, 1)
-		c.log.Error("Failed to buffer message",
-			"project_id", projectID,
-			"error", err)
-		return
-	}
-
-	c.log.Debug("Message processed",
-		"project_id", projectID,
-		"der_count", len(ders),
-		"bytes", len(msg.Payload()))
-}
-
-func (c *Client) updateProject(projectID string) {
-	c.metrics.ActiveProjects[projectID] = time.Now()
-	c.cleanupProjects()
-}
-
-func (c *Client) cleanupProjects() {
-	threshold := time.Now().Add(-1 * time.Hour)
-	for id, lastSeen := range c.metrics.ActiveProjects {
-		if lastSeen.Before(threshold) {
-			delete(c.metrics.ActiveProjects, id)
-		}
-	}
+	metrics.Local.Counter(metrics.MessagesReceived).With(prometheus.Labels{"topic": c.topic}).Inc()
+	c.log.Debug("Message processed", "project_id", projectID, "der_count", len(ders), "payload_bytes", len(msg.Payload()))
 }
 
 func (c *Client) Stop() {
+	c.log.Info("Stopping MQTT client", "topic", c.topic)
 	if token := c.client.Unsubscribe(c.topic); token.Wait() && token.Error() != nil {
 		c.log.Error("Failed to unsubscribe", "error", token.Error())
 	}
 
 	c.client.Disconnect(250)
-	c.log.Info("MQTT client stopped")
+	c.log.Info("MQTT client disconnected", "topic", c.topic)
 }

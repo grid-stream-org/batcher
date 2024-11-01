@@ -10,11 +10,6 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
-var (
-	ErrDurationGreater = errors.New("buffer duration must be greater than offset")
-	ErrNeedPartition   = errors.New("num_partitions must be positive when partition_mode is enabled")
-)
-
 type Config struct {
 	MQTT       MQTTConfig   `envconfig:"MQTT"`
 	DB         DBConfig     `envconfig:"DB"`
@@ -35,7 +30,7 @@ type MQTTConfig struct {
 	Username      string `envconfig:"USERNAME" required:"true"`
 	Password      string `envconfig:"PASSWORD" required:"true"`
 	QOS           int    `envconfig:"QOS" default:"1"`
-	UseTLS        bool   `envconfig:"USE_TLS" default:"false"`
+	SkipVerify    bool   `envconfig:"SKIP_VERIFY" default:"false"`
 	CertFile      string `envconfig:"CERT_FILE"`
 	KeyFile       string `envconfig:"KEY_FILE"`
 	CAFile        string `envconfig:"CA_FILE"`
@@ -76,12 +71,20 @@ func Load() (*Config, error) {
 
 func validate(cfg *Config) error {
 	if cfg.Buffer.Duration <= cfg.Buffer.Offset {
-		return ErrDurationGreater
+		return errors.New("buffer duration must be greater than offset")
 	}
 
 	if cfg.MQTT.PartitionMode && cfg.MQTT.NumPartitions <= 0 {
-		return ErrNeedPartition
+		return errors.New("num_partitions must be positive when partition_mode is enabled")
 	}
 
+	if cfg.MQTT.SkipVerify {
+		if cfg.MQTT.CertFile != "" && cfg.MQTT.KeyFile == "" {
+			return errors.New("key file required when cert file provided")
+		}
+		if cfg.MQTT.KeyFile != "" && cfg.MQTT.CertFile == "" {
+			return errors.New("cert file required when key file provided")
+		}
+	}
 	return nil
 }

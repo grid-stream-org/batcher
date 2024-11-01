@@ -96,14 +96,7 @@ func TestBuffer_Add(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := b.Add(tt.data)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				// Verify metrics
-				assert.Greater(t, b.metrics.MessagesCount, int64(0))
-			}
+			b.Add(tt.data)
 		})
 	}
 }
@@ -135,17 +128,13 @@ func TestBuffer_Flush(t *testing.T) {
 
 	t.Run("flush with data", func(t *testing.T) {
 		testData := []byte("test data")
-		err := b.Add(testData)
-		require.NoError(t, err)
-
+		b.Add(testData)
 		b.flush()
 
 		select {
 		case data := <-b.FlushedData():
 			assert.Len(t, data, 1)
 			assert.Equal(t, testData, data[0])
-			assert.Greater(t, b.metrics.FlushCount, int64(0))
-			assert.False(t, b.metrics.LastFlushTime.IsZero())
 		case <-time.After(50 * time.Millisecond):
 			t.Fatal("Expected flushed data, but none received")
 		}
@@ -169,8 +158,7 @@ func TestBuffer_AutoFlush(t *testing.T) {
 	defer b.Stop()
 
 	testData := []byte("test data")
-	err = b.Add(testData)
-	require.NoError(t, err)
+	b.Add(testData)
 
 	select {
 	case data := <-b.FlushedData():
@@ -196,8 +184,7 @@ func TestBuffer_Stop(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add test data
-	err = b.Add([]byte("test data"))
-	require.NoError(t, err)
+	b.Add([]byte("test data"))
 
 	// Start a goroutine to read flushed data
 	done := make(chan struct{})
@@ -244,8 +231,7 @@ func TestBuffer_ConcurrentAccess(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
-				err := b.Add([]byte(fmt.Sprintf("data-%d-%d", id, j)))
-				assert.NoError(t, err)
+				b.Add([]byte(fmt.Sprintf("data-%d-%d", id, j)))
 			}
 		}(i)
 	}
