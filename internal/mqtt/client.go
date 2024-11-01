@@ -55,7 +55,7 @@ func NewClient(ctx context.Context, cfg *config.MQTTConfig, buf *buffer.Buffer, 
 	}
 
 	m.client = mqtt.NewClient(opts)
-	m.log.Debug("Attempting to connect to MQTT broker...")
+	m.log.Info("Attempting to connect to MQTT broker...")
 
 	if token := m.client.Connect(); token.Wait() && token.Error() != nil {
 		log.Error("Error connecting to MQTT client", "error", err)
@@ -73,7 +73,6 @@ func createClientOptions(cfg *config.MQTTConfig, log *slog.Logger) (*mqtt.Client
 	clientID := fmt.Sprintf("batcher-%s", uuid.NewString())
 	brokerURL := fmt.Sprintf("tls://%s:%d", cfg.Host, cfg.Port)
 
-	log.Debug("Creating client options", "client_id", clientID, "broker", brokerURL)
 	opts := mqtt.NewClientOptions().
 		AddBroker(brokerURL).
 		SetClientID(clientID).
@@ -120,12 +119,25 @@ func createClientOptions(cfg *config.MQTTConfig, log *slog.Logger) (*mqtt.Client
 		tlsCfg.RootCAs = caCertPool
 	}
 	opts.SetTLSConfig(tlsCfg)
+	log.Info("MQTT Client created with options",
+		"broker", opts.Servers[0].String(),
+		"client_id", opts.ClientID,
+		"clean_session", opts.CleanSession,
+		"keep_alive", opts.KeepAlive,
+		"username", opts.Username,
+		"tls_enabled", opts.TLSConfig != nil,
+		"auto_reconnect", opts.AutoReconnect,
+		"protocol_version", opts.ProtocolVersion,
+		"connect_timeout", opts.ConnectTimeout.String(),
+		"keep_alive", opts.KeepAlive,
+		"write_timeout", opts.WriteTimeout.String(),
+	)
 
 	return opts, nil
 }
 
 func (m *Client) subscribe() error {
-	m.log.Debug("Subscribing to topic", "topic", m.topic)
+	m.log.Info("Subscribing to topic", "topic", m.topic)
 	token := m.client.Subscribe(m.topic, byte(m.cfg.QOS), m.handleMessage)
 	if token.Wait() && token.Error() != nil {
 		return errors.Wrapf(token.Error(), "subscribing to topic %s", m.topic)
@@ -143,7 +155,7 @@ func getTopic(cfg *config.MQTTConfig) string {
 }
 
 func (c *Client) handleMessage(_ mqtt.Client, msg mqtt.Message) {
-	c.log.Debug("Message received", "topic", msg.Topic(), "payload_size", len(msg.Payload()))
+	c.log.Info("Message received", "topic", msg.Topic(), "payload_size", len(msg.Payload()))
 
 	var ders []DER
 	if err := json.Unmarshal(msg.Payload(), &ders); err != nil {
@@ -161,7 +173,7 @@ func (c *Client) handleMessage(_ mqtt.Client, msg mqtt.Message) {
 	c.buffer.Add(msg.Payload())
 	projectID := ders[0].ProjectID
 	metrics.Local.Counter(metrics.MessagesReceived).With(prometheus.Labels{"topic": c.topic}).Inc()
-	c.log.Debug("Message processed", "project_id", projectID, "der_count", len(ders), "payload_bytes", len(msg.Payload()))
+	c.log.Info("Message processed", "project_id", projectID, "der_count", len(ders), "payload_bytes", len(msg.Payload()))
 }
 
 func (c *Client) Stop() {

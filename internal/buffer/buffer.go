@@ -50,7 +50,7 @@ func (b *Buffer) Add(data []byte) {
 	b.data = append(b.data, data)
 
 	metrics.Local.Gauge(metrics.BufferSize).WithLabelValues().Set(float64(len(b.data)))
-	b.log.Debug("Record added to buffer", "buffer_size", len(b.data))
+	b.log.Info("Record added to buffer", "buffer_size", len(b.data))
 }
 
 func (b *Buffer) flush() {
@@ -85,13 +85,13 @@ func (b *Buffer) autoFlush(ctx context.Context) {
 			b.log.Info("Finishing auto flush")
 			return
 		case <-b.ticker.C:
-
 			b.flush()
 		}
 	}
 }
 
 func (b *Buffer) Stop() {
+	b.log.Info("Stopping buffer")
 	b.ticker.Stop()
 	b.flush() // Final flush
 	close(b.flushCh)
