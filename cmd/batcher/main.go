@@ -44,7 +44,6 @@ func run() error {
 
 	// Initialize prometheus metrics
 	metrics.InitMetricsProvider()
-
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":2112", nil)
 
@@ -59,6 +58,9 @@ func run() error {
 	if err != nil {
 		return errors.Wrap(err, "initializing mqtt client")
 	}
+	if err := mqtt.Subscribe(); err != nil {
+		return errors.Wrap(err, "subscribing")
+	}
 
 	// Wait for shutdown signal
 	log.Info("Application is running...")
@@ -67,5 +69,6 @@ func run() error {
 	log.Info("Shutting down...")
 	buf.Stop()
 	mqtt.Stop()
+	log.Info("Successfully shut down")
 	return nil
 }
