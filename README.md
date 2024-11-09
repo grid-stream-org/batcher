@@ -33,11 +33,7 @@ For guidlines and instructions on contributing, please refer to [CONTRIBUTING.md
 ## 🚀 Local Run
 
 ### Prerequisites
-- Ensure you have python and pip installed
-- Create a local `.env` file, and ensure it is populated with the correct credentials
-```bash
-cp .env.example .env
-```
+- Ensure you have go installed
 
 ### Steps
 1. First, start by cloning this repository to your local machine
@@ -48,11 +44,15 @@ git clone https://github.com/grid-stream-org/batcher.git
 ```bash
 cd batcher
 ```
-3. Install the project dependencies
+3. Create a local `.env` file, and ensure it is populated with the correct credentials
+```bash
+cp .env.example .env
+```
+4. Install the project dependencies
 ```bash
 make download
 ```
-4. Run the batcher
+5. Run the batcher
 ```bash
 make run
 ```
