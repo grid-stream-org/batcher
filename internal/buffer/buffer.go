@@ -12,10 +12,6 @@ import (
 	"github.com/grid-stream-org/batcher/metrics"
 )
 
-var (
-	ErrDurationGreater = errors.New("duration must be greater than offset")
-)
-
 type Buffer struct {
 	mu      sync.Mutex
 	data    [][]byte
@@ -27,7 +23,7 @@ type Buffer struct {
 
 func New(ctx context.Context, cfg *config.BufferConfig, log *slog.Logger) (*Buffer, error) {
 	if cfg.Duration <= cfg.Offset {
-		return nil, ErrDurationGreater
+		return nil, errors.New("duration must be greater than offset")
 	}
 
 	b := &Buffer{

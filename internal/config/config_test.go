@@ -20,7 +20,6 @@ func setupEnv(envVars map[string]string) func() {
 		"MQTT_PASSWORD",
 		"DB_PROJECT_ID",
 		"DB_DATASET_ID",
-		"DB_TABLE_ID",
 		"DB_CREDENTIALS_PATH",
 	}
 
@@ -63,7 +62,6 @@ func TestLoadConfig_Success(t *testing.T) {
 		"MQTT_PASSWORD":       "pass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 	})
 	defer teardown()
@@ -78,10 +76,9 @@ func TestLoadConfig_Success(t *testing.T) {
 	assert.Equal(t, 1883, cfg.MQTT.Port)
 	assert.Equal(t, "user", cfg.MQTT.Username)
 	assert.Equal(t, "pass", cfg.MQTT.Password)
-	assert.Equal(t, "db-project", cfg.DB.ProjectID)
-	assert.Equal(t, "db-dataset", cfg.DB.DatasetID)
-	assert.Equal(t, "db-table", cfg.DB.TableID)
-	assert.Equal(t, "/path/to/creds.json", cfg.DB.CredsPath)
+	assert.Equal(t, "db-project", cfg.BQ.ProjectID)
+	assert.Equal(t, "db-dataset", cfg.BQ.DatasetID)
+	assert.Equal(t, "/path/to/creds.json", cfg.BQ.CredsPath)
 }
 
 func TestLoadConfig_MissingRequiredEnv(t *testing.T) {
@@ -102,7 +99,6 @@ func TestLoadConfig_DefaultValues(t *testing.T) {
 		"MQTT_PASSWORD":       "pass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 	})
 	defer teardown()
@@ -123,7 +119,6 @@ func TestLoadConfig_InvalidDuration(t *testing.T) {
 		"MQTT_PASSWORD":       "pass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 		"BUFFER_DURATION":     "invalid",
 	})
@@ -141,7 +136,6 @@ func TestLoadConfig_EmptyDuration(t *testing.T) {
 		"MQTT_PASSWORD":       "pass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 		"BUFFER_DURATION":     "",
 	})
@@ -162,7 +156,6 @@ func TestLoadConfig_OverrideDefaults(t *testing.T) {
 		"MQTT_PASSWORD":       "mqttpass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 	})
 	defer teardown()
@@ -187,7 +180,6 @@ func TestLoadConfig_InvalidPort(t *testing.T) {
 		"MQTT_PASSWORD":       "pass",
 		"DB_PROJECT_ID":       "db-project",
 		"DB_DATASET_ID":       "db-dataset",
-		"DB_TABLE_ID":         "db-table",
 		"DB_CREDENTIALS_PATH": "/path/to/creds.json",
 	})
 	defer teardown()

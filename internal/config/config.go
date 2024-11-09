@@ -12,7 +12,7 @@ import (
 
 type Config struct {
 	MQTT       MQTTConfig   `envconfig:"MQTT"`
-	DB         DBConfig     `envconfig:"DB"`
+	BQ         BQConfig     `envconfig:"BQ"`
 	Buffer     BufferConfig `envconfig:"BUFFER"`
 	Logger     LoggerConfig `envconfig:"LOG"`
 	NumWorkers int          `envconfig:"NUM_WORKERS" default:"2"`
@@ -39,10 +39,9 @@ type MQTTConfig struct {
 	NumPartitions int    `envconfig:"NUM_PARTITIONS" default:"1"`
 }
 
-type DBConfig struct {
+type BQConfig struct {
 	ProjectID string `envconfig:"PROJECT_ID" required:"true"`
 	DatasetID string `envconfig:"DATASET_ID" required:"true"`
-	TableID   string `envconfig:"TABLE_ID" required:"true"`
 	CredsPath string `envconfig:"CREDENTIALS_PATH" required:"true"`
 }
 
