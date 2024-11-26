@@ -1,0 +1,122 @@
+package task
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/grid-stream-org/batcher/internal/config"
+	"github.com/grid-stream-org/batcher/internal/destination"
+	"github.com/patrickmn/go-cache"
+	"github.com/pkg/errors"
+)
+
+type TaskPool struct {
+	cfg         *config.Pool
+	tasks       chan Task
+	destination destination.Destination
+	dedup       *cache.Cache
+	wg          sync.WaitGroup
+	log         *slog.Logger
+}
+
+func NewTaskPool(ctx context.Context, cfg *config.Pool, dest destination.Destination, log *slog.Logger) *TaskPool {
+	tp := &TaskPool{
+		cfg:         cfg,
+		tasks:       make(chan Task, cfg.Capacity),
+		destination: dest,
+		dedup:       cache.New(1*time.Minute, 5*time.Minute),
+		log:         log.With("component", "task_pool", "num_workers", cfg.NumWorkers, "capacity", cfg.Capacity),
+	}
+
+	tp.log.Info("task pool created")
+	return tp
+}
+
+func (tp *TaskPool) Submit(t any) {
+	task, ok := t.(Task)
+	if !ok {
+		tp.log.Debug("received non-task event", "type", typeof(t))
+		return
+	}
+	tp.submit(task)
+}
+
+func (tp *TaskPool) submit(t Task) {
+	log := tp.log.With(t.LogFields()...)
+	log.Debug("received task from event bus")
+	if tp.dedup.Add(t.ID, struct{}{}, 5*time.Minute) != nil {
+		log.Debug("skipping duplicate task")
+		return
+
+	}
+	log.Debug("submitting task")
+	tp.tasks <- t
+}
+
+func (tp *TaskPool) Start(ctx context.Context) {
+	tp.log.Info("starting task pool")
+	for i := 0; i < tp.cfg.NumWorkers; i++ {
+		tp.wg.Add(1)
+		go tp.worker(ctx, i)
+	}
+	tp.log.Info("task pool started successfully")
+}
+
+func (tp *TaskPool) worker(ctx context.Context, workerId int) {
+	defer tp.wg.Done()
+	log := tp.log.With("worker_id", workerId)
+	for {
+		select {
+		case t, ok := <-tp.tasks:
+			if !ok {
+				log.Debug("task channel closed, stopping worker")
+				return
+			}
+			log := log.With(t.LogFields()...)
+			log.Debug("processing task")
+			outcome, err := t.Execute(workerId)
+			if err != nil {
+				if errors.Is(err, ErrNoDERs) {
+					log.Warn("received empty DER array")
+				} else {
+					log.Error("task execution failed", "error", err)
+				}
+				continue
+			}
+			if err := tp.destination.Add(outcome); err != nil {
+				log.Error("failed to add outcome to destination", "error", err)
+				continue
+			}
+			log.Debug("task completed successfully")
+		case <-ctx.Done():
+			log.Debug("context cancelled, stopping worker", "reason", ctx.Err())
+			return
+		}
+	}
+}
+
+func (tp *TaskPool) Wait() {
+	tp.log.Info("initiating task pool shutdown")
+	close(tp.tasks)
+	tp.dedup.Flush()
+	tp.wg.Wait()
+	tp.log.Info("task pool shutdown complete")
+}
+
+func (tp *TaskPool) LogFields() []any {
+	return []any{
+		"component", "task_pool",
+		"num_workers", tp.cfg.NumWorkers,
+		"capacity", tp.cfg.Capacity,
+	}
+}
+
+func typeof(v interface{}) string {
+	if v == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%T", v)
+}
