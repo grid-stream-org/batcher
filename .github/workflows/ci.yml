@@ -1,4 +1,4 @@
-name: CI
+name: ci
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint:
-    name: Lint
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
           version: latest
 
   test:
-    name: Test
+    name: test
     needs: lint
     runs-on: ubuntu-latest
     steps:
@@ -56,7 +56,7 @@ jobs:
           retention-days: 7
 
   build:
-    name: Build
+    name: build
     needs: test
     runs-on: ubuntu-latest
     steps:
