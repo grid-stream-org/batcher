@@ -38,13 +38,13 @@ func NewTaskPool(ctx context.Context, cfg *config.Pool, dest destination.Destina
 func (tp *TaskPool) Submit(t any) {
 	task, ok := t.(Task)
 	if !ok {
-		tp.log.Debug("received non-task event", "type", typeof(t))
+		tp.log.Warn("received non-task event", "type", typeof(t))
 		return
 	}
-	tp.submit(task)
+	tp.submitTask(task)
 }
 
-func (tp *TaskPool) submit(t Task) {
+func (tp *TaskPool) submitTask(t Task) {
 	log := tp.log.With(t.LogFields()...)
 	log.Debug("received task from event bus")
 	if tp.dedup.Add(t.ID, struct{}{}, 5*time.Minute) != nil {
@@ -82,6 +82,9 @@ func (tp *TaskPool) worker(ctx context.Context, workerId int) {
 				if errors.Is(err, ErrNoDERs) {
 					log.Warn("received empty DER array")
 				} else {
+					// For now we will just log an error if the task execution fails
+					// I can't see this happening for any other reason than a bad json payload
+					// Until something else arises, we can stick with this
 					log.Error("task execution failed", "error", err)
 				}
 				continue
@@ -99,7 +102,7 @@ func (tp *TaskPool) worker(ctx context.Context, workerId int) {
 }
 
 func (tp *TaskPool) Wait() {
-	tp.log.Info("initiating task pool shutdown")
+	tp.log.Info("shutting down task pool")
 	close(tp.tasks)
 	tp.dedup.Flush()
 	tp.wg.Wait()

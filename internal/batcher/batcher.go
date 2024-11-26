@@ -3,7 +3,6 @@ package batcher
 import (
 	"context"
 	"log/slog"
-	"sync"
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/destination"
@@ -11,6 +10,7 @@ import (
 	"github.com/grid-stream-org/batcher/internal/task"
 	"github.com/grid-stream-org/batcher/pkg/eventbus"
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 type Batcher struct {
@@ -20,7 +20,6 @@ type Batcher struct {
 	mqtt *mqtt.Client
 	eb   eventbus.EventBus
 	log  *slog.Logger
-	wg   sync.WaitGroup
 }
 
 func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Batcher, error) {
@@ -52,40 +51,35 @@ func (b *Batcher) Run(ctx context.Context) (err error) {
 	b.log.Info("starting batcher")
 	defer func() {
 		if stopErr := b.Stop(ctx); stopErr != nil {
-			if err != nil {
-				err = errors.Wrap(err, stopErr.Error())
-			} else {
-				err = stopErr
-			}
+			err = multierr.Combine(err, stopErr)
 		}
 	}()
 
 	// Start event listener
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
-		b.listen(ctx)
-	}()
+	go b.listen(ctx)
 
 	// Start task pool
 	b.tp.Start(ctx)
 
 	// Connect to MQTT
-	if err = b.mqtt.Connect(); err != nil {
+	if err := b.mqtt.Connect(); err != nil {
 		return errors.WithStack(err)
 	}
 
 	// Subscribe to topic
-	if err = b.mqtt.Subscribe(); err != nil {
+	if err := b.mqtt.Subscribe(); err != nil {
 		return errors.WithStack(err)
 	}
 
 	// Wait for context cancellation
 	<-ctx.Done()
-	return ctx.Err()
+	if ctx.Err() != nil {
+		err = multierr.Combine(err, ctx.Err())
+	}
+	return err
 }
 
-func (b *Batcher) listen(ctx context.Context) error {
+func (b *Batcher) listen(ctx context.Context) {
 	b.log.Debug("starting event listener")
 	events := b.eb.Subscribe(b.cfg.Pool.Capacity)
 	defer b.eb.Unsubscribe(events)
@@ -95,24 +89,21 @@ func (b *Batcher) listen(ctx context.Context) error {
 		case event := <-events:
 			b.tp.Submit(event)
 		case <-ctx.Done():
-			return ctx.Err()
+			return
 		}
 	}
 }
 
 func (b *Batcher) Stop(ctx context.Context) error {
-	b.log.Info("initiating batcher shutdown")
+	b.log.Info("shutting down batcher")
 
-	// Stop mqtt client
+	// Stop MQTT client
 	if err := b.mqtt.Stop(); err != nil {
-		b.log.Error("failed to stop mqtt client", "error", err)
+		b.log.Error("failed to stop MQTT client", "error", err)
 	}
 
-	// Close event bus to stops listening
+	// Close event bus to stop listening
 	b.eb.Close()
-
-	// Wait for event listener to finish
-	b.wg.Wait()
 
 	// Stop task pool and wait for workers to finish
 	b.tp.Wait()
