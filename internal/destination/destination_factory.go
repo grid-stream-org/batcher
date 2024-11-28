@@ -13,9 +13,9 @@ func NewDestination(ctx context.Context, cfg *config.Destination, log *slog.Logg
 	case "database":
 		return newDatabaseDestination(ctx, cfg, log)
 	case "file":
-		return newFileDestination(cfg, log)
+		return newFileDestination(ctx, cfg, log)
 	case "stdout":
-		return newStdoutDestination(log)
+		return newStdoutDestination(ctx, cfg, log)
 	default:
 		return nil, errors.Errorf("invalid destination type: %s", cfg.Type)
 	}

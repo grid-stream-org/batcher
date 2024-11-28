@@ -1,91 +1,213 @@
 package eventbus
 
 import (
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
 
-func TestEventBus_SubscribeAndPublish(t *testing.T) {
+type EventBusTestSuite struct {
+	suite.Suite
+}
+
+func (s *EventBusTestSuite) TestNew() {
 	eb := New()
-	require.NotNil(t, eb, "EventBus should be successfully created")
+	s.NotNil(eb)
+	s.Empty(eb.Subscribers())
+}
 
-	// Subscribe to the EventBus
-	ch1 := eb.Subscribe(10)
-	ch2 := eb.Subscribe(10)
+func (s *EventBusTestSuite) TestSubscribe() {
+	eb := New()
 
-	// Ensure the channels are not nil
-	require.NotNil(t, ch1, "Channel 1 should not be nil")
-	require.NotNil(t, ch2, "Channel 2 should not be nil")
-
-	// Publish an event
-	event := "Test Event"
-	eb.Publish(event)
-
-	// Use a timeout to prevent the test from hanging
-	select {
-	case received := <-ch1:
-		assert.Equal(t, event, received, "Channel 1 should receive the published event")
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for event on Channel 1")
+	testCases := []struct {
+		name     string
+		capacity int
+	}{
+		{"Zero capacity", 0},
+		{"Small capacity", 5},
+		{"Large capacity", 100},
 	}
 
-	select {
-	case received := <-ch2:
-		assert.Equal(t, event, received, "Channel 2 should receive the published event")
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout waiting for event on Channel 2")
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			ch := eb.Subscribe(tc.capacity)
+			s.NotNil(ch)
+			s.Equal(tc.capacity, cap(ch))
+			s.Len(eb.Subscribers(), 1)
+			eb.Close() // Cleanup
+		})
 	}
 }
 
-func TestEventBus_PublishWithoutSubscribers(t *testing.T) {
-	eb := New()
-	require.NotNil(t, eb, "EventBus should be successfully created")
+func (s *EventBusTestSuite) TestPublish() {
+	testCases := []struct {
+		name     string
+		events   []interface{}
+		capacity int
+	}{
+		{
+			name:     "String events",
+			events:   []interface{}{"event1", "event2"},
+			capacity: 2,
+		},
+		{
+			name:     "Mixed type events",
+			events:   []interface{}{42, "str", true},
+			capacity: 3,
+		},
+		{
+			name:     "Full buffer handling",
+			events:   []interface{}{1, 2, 3, 4, 5},
+			capacity: 2, // Smaller than number of events to test buffer full scenario
+		},
+	}
 
-	// Publish an event when there are no subscribers
-	event := "Event without subscribers"
-	eb.Publish(event)
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			eb := New()
+			ch := eb.Subscribe(tc.capacity)
 
-	// Ensure no errors or panics occur when publishing without subscribers
-	assert.True(t, true, "Publishing without subscribers should not cause any issues")
+			// Publish events
+			for _, event := range tc.events {
+				eb.Publish(event)
+			}
+
+			// Verify received events up to buffer capacity
+			receivedCount := 0
+			timeout := time.After(100 * time.Millisecond)
+
+		receiveLoop:
+			for receivedCount < cap(ch) {
+				select {
+				case received := <-ch:
+					s.Equal(tc.events[receivedCount], received)
+					receivedCount++
+				case <-timeout:
+					break receiveLoop
+				}
+			}
+
+			eb.Close()
+		})
+	}
 }
 
-func TestEventBus_SubscribeMultipleTimes(t *testing.T) {
+func (s *EventBusTestSuite) TestUnsubscribe() {
 	eb := New()
-	require.NotNil(t, eb, "EventBus should be successfully created")
 
-	// Subscribe multiple times and verify that each channel is unique
-	ch1 := eb.Subscribe(10)
-	ch2 := eb.Subscribe(10)
+	// Create multiple subscribers
+	ch1 := eb.Subscribe(1)
+	ch2 := eb.Subscribe(1)
+	ch3 := eb.Subscribe(1)
 
-	require.NotNil(t, ch1, "Channel 1 should not be nil")
-	require.NotNil(t, ch2, "Channel 2 should not be nil")
-	assert.NotEqual(t, ch1, ch2, "Each subscriber should have a unique channel")
-}
+	s.Len(eb.Subscribers(), 3)
 
-func TestEventBus_NonBlockingPublish(t *testing.T) {
-	eb := New()
-	require.NotNil(t, eb, "EventBus should be successfully created")
+	// Unsubscribe middle channel
+	eb.Unsubscribe(ch2)
 
-	// Subscribe with a channel that won't read immediately
-	ch := eb.Subscribe(10)
-	require.NotNil(t, ch, "Channel should not be nil")
+	// Verify ch2 is closed
+	_, ok := <-ch2
+	s.False(ok, "Unsubscribed channel should be closed")
 
-	// Publish an event and ensure it doesn't block even if the channel is not ready to read
-	event := "Non-blocking event"
-	done := make(chan bool)
-
-	go func() {
-		eb.Publish(event)
-		done <- true
-	}()
+	// Verify other channels still work
+	eb.Publish("test")
 
 	select {
-	case <-done:
-		assert.True(t, true, "Publishing should be non-blocking and complete successfully")
-	case <-time.After(1 * time.Second):
-		t.Error("Timeout: Publishing event should not block")
+	case msg := <-ch1:
+		s.Equal("test", msg)
+	case <-time.After(100 * time.Millisecond):
+		s.Fail("Should receive message on ch1")
 	}
+
+	select {
+	case msg := <-ch3:
+		s.Equal("test", msg)
+	case <-time.After(100 * time.Millisecond):
+		s.Fail("Should receive message on ch3")
+	}
+
+	s.Len(eb.Subscribers(), 2)
+	eb.Close()
+}
+
+func (s *EventBusTestSuite) TestClose() {
+	eb := New()
+
+	// Create multiple subscribers
+	channels := make([]chan any, 3)
+	for i := range channels {
+		channels[i] = eb.Subscribe(1)
+	}
+
+	// Close the event bus
+	eb.Close()
+
+	// Verify all channels are closed
+	for i, ch := range channels {
+		_, ok := <-ch
+		s.False(ok, "Channel %d should be closed", i)
+	}
+
+	s.Nil(eb.Subscribers(), "Subscribers slice should be nil after close")
+}
+
+func (s *EventBusTestSuite) TestConcurrentOperations() {
+	eb := New()
+	var wg sync.WaitGroup
+
+	// Number of concurrent operations
+	numPublishers := 10
+	numSubscribers := 5
+	numUnsubscribers := 3
+	eventsPerPublisher := 100
+
+	// Create initial subscribers
+	channels := make([]chan any, numSubscribers)
+	for i := range channels {
+		channels[i] = eb.Subscribe(eventsPerPublisher)
+	}
+
+	// Start publishers
+	for i := 0; i < numPublishers; i++ {
+		wg.Add(1)
+		go func(publisherID int) {
+			defer wg.Done()
+			for j := 0; j < eventsPerPublisher; j++ {
+				eb.Publish(publisherID*eventsPerPublisher + j)
+				time.Sleep(time.Microsecond) // Small delay to increase chance of concurrent operations
+			}
+		}(i)
+	}
+
+	// Start unsubscribers
+	for i := 0; i < numUnsubscribers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			time.Sleep(time.Millisecond * time.Duration(i*50))
+			eb.Unsubscribe(channels[i])
+		}(i)
+	}
+
+	// Wait for all operations to complete
+	wg.Wait()
+	time.Sleep(100 * time.Millisecond) // Give time for final events to be processed
+
+	// Verify remaining channels are still functional
+	for i := numUnsubscribers; i < len(channels); i++ {
+		select {
+		case _, ok := <-channels[i]:
+			s.True(ok, "Channel %d should still be open", i)
+		default:
+			// Channel might be empty, which is fine
+		}
+	}
+
+	eb.Close()
+}
+
+func TestEventBusSuite(t *testing.T) {
+	suite.Run(t, new(EventBusTestSuite))
 }

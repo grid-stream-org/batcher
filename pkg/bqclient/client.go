@@ -10,8 +10,8 @@ import (
 )
 
 type BQClient interface {
-	Put(ctx context.Context, input PutInput) error
-	PutAll(ctx context.Context, inputs []PutInput) error
+	Put(ctx context.Context, table string, data any) error
+	PutAll(ctx context.Context, inputs map[string][]any) error
 	Inserter(table string) *bigquery.Inserter
 	Close() error
 }
@@ -23,12 +23,7 @@ type bqClient struct {
 	log       *slog.Logger
 }
 
-type PutInput interface {
-	Table() string
-	Data() any
-}
-
-func New(ctx context.Context, projectID string, datasetID string, credsPath string, log *slog.Logger) (*bqClient, error) {
+func New(ctx context.Context, projectID string, datasetID string, credsPath string, log *slog.Logger) (BQClient, error) {
 	bq, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(credsPath))
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -44,33 +39,26 @@ func New(ctx context.Context, projectID string, datasetID string, credsPath stri
 	return c, nil
 }
 
-func (c *bqClient) Put(ctx context.Context, input PutInput) error {
-	table := input.Table()
+func (c *bqClient) Put(ctx context.Context, table string, data any) error {
 	if table == "" {
 		return errors.New("table cannot be empty")
 	}
 
 	c.log.Debug("beginning insert", "table", table)
-	if err := c.Inserter(table).Put(ctx, input.Data()); err != nil {
+	if err := c.Inserter(table).Put(ctx, data); err != nil {
 		return errors.WithStack(err)
 	}
 	c.log.Debug("insert successful", "table", table)
 	return nil
 }
 
-func (c *bqClient) PutAll(ctx context.Context, inputs []PutInput) error {
+func (c *bqClient) PutAll(ctx context.Context, inputs map[string][]any) error {
 	if len(inputs) == 0 {
 		c.log.Debug("skipping; inputs is empty")
 		return nil
 	}
 
-	sortedInputs := make(map[string][]any)
-	for _, input := range inputs {
-		table := input.Table()
-		sortedInputs[table] = append(sortedInputs[table], input.Data())
-	}
-
-	for table, data := range sortedInputs {
+	for table, data := range inputs {
 		if table == "" {
 			return errors.New("table cannot be empty")
 		}
@@ -81,7 +69,6 @@ func (c *bqClient) PutAll(ctx context.Context, inputs []PutInput) error {
 		}
 		c.log.Debug("batch insert successful", "table", table, "record_count", len(data))
 	}
-
 	return nil
 }
 

@@ -7,31 +7,35 @@ import (
 	"time"
 
 	"github.com/grid-stream-org/batcher/internal/outcome"
-	"github.com/grid-stream-org/batcher/pkg/models"
 	"github.com/pkg/errors"
 )
 
 var (
-	ErrNoDERs = errors.New("received empty DER array")
+	ErrNoDERs            = errors.New("received empty DER array")
+	ErrVariousProjectIDs = errors.New("invalid payload; various project ids")
 )
 
 type Task struct {
-	ID        string
+	id        string
 	payload   []byte
-	CreatedAt time.Time
+	createdAt time.Time
 }
 
 func NewTask(payload []byte) Task {
 	return Task{
-		ID:        makeID(payload),
+		id:        makeID(payload),
 		payload:   payload,
-		CreatedAt: time.Now(),
+		createdAt: time.Now(),
 	}
 }
 
-func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
+func (t *Task) ID() string {
+	return t.id
+}
+
+func (t *Task) Execute(workerId int) (outcome.Outcome, error) {
 	start := time.Now()
-	var ders []models.DER
+	var ders []outcome.DER
 
 	if err := json.Unmarshal(t.payload, &ders); err != nil {
 		return nil, errors.Wrap(err, "failed to parse message payload")
@@ -41,10 +45,28 @@ func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 		return nil, ErrNoDERs
 	}
 
-	finish := time.Now()
-	duration := finish.Sub(start)
-	o := outcome.New(workerId, ders, "test-table", duration)
+	projID, err := projectID(ders)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var totalDEROutput float64 = 0
+
+	data := make(map[string][]any)
+
+	o := outcome.NewTaskOutcome(workerId, t.id, projID, data, totalDEROutput, time.Since(start))
 	return o, nil
+}
+
+func projectID(ders []outcome.DER) (string, error) {
+	var projID = ders[0].ProjectID
+	for _, der := range ders {
+		// Validation, we shouldn ever get a payload of DERS from various project IDs
+		if der.ProjectID != projID {
+			return "", ErrVariousProjectIDs
+		}
+	}
+	return projID, nil
 }
 
 func makeID(payload []byte) string {
@@ -55,7 +77,7 @@ func makeID(payload []byte) string {
 func (t *Task) LogFields() []any {
 	return []any{
 		"component", "task",
-		"id", t.ID,
-		"created_at", t.CreatedAt,
+		"id", t.id,
+		"created_at", t.createdAt,
 	}
 }

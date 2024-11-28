@@ -49,7 +49,7 @@ func run() (err error) {
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
 		if err := http.ListenAndServe(":2112", nil); err != nil {
-			log.Warn("metrics server failed to start; metrics will not be collected.", "reason", err)
+			log.Warn("metrics server failed to start; metrics will not be collected", "reason", err)
 		}
 	}()
 
@@ -59,7 +59,8 @@ func run() (err error) {
 		return err
 	}
 
-	// Check for timeout - Do not return the context cancellation error because we suppress them (to account for signals)
+	// Check for timeout
+	// Do not return the context cancellation error because we suppress them (to account for signals)
 	if cfg.Batcher.Timeout > 0 {
 		ctx, cancel = context.WithTimeout(ctx, cfg.Batcher.Timeout)
 		defer cancel()

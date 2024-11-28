@@ -2,13 +2,13 @@ package task
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/destination"
+	"github.com/grid-stream-org/batcher/internal/utils"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 )
@@ -22,13 +22,22 @@ type TaskPool struct {
 	log         *slog.Logger
 }
 
-func NewTaskPool(ctx context.Context, cfg *config.Pool, dest destination.Destination, log *slog.Logger) *TaskPool {
+func NewTaskPool(
+	ctx context.Context,
+	cfg *config.Pool,
+	dest destination.Destination,
+	log *slog.Logger,
+) *TaskPool {
 	tp := &TaskPool{
 		cfg:         cfg,
 		tasks:       make(chan Task, cfg.Capacity),
 		destination: dest,
 		dedup:       cache.New(1*time.Minute, 5*time.Minute),
-		log:         log.With("component", "task_pool", "num_workers", cfg.NumWorkers, "capacity", cfg.Capacity),
+		log: log.With(
+			"component", "task_pool",
+			"num_workers", cfg.NumWorkers,
+			"capacity", cfg.Capacity,
+		),
 	}
 
 	tp.log.Info("task pool created")
@@ -38,7 +47,7 @@ func NewTaskPool(ctx context.Context, cfg *config.Pool, dest destination.Destina
 func (tp *TaskPool) Submit(t any) {
 	task, ok := t.(Task)
 	if !ok {
-		tp.log.Warn("received non-task event", "type", typeof(t))
+		tp.log.Warn("received non-task event", "type", utils.TypeOf(t))
 		return
 	}
 	tp.submitTask(task)
@@ -47,8 +56,8 @@ func (tp *TaskPool) Submit(t any) {
 func (tp *TaskPool) submitTask(t Task) {
 	log := tp.log.With(t.LogFields()...)
 	log.Debug("received task from event bus")
-	if tp.dedup.Add(t.ID, struct{}{}, 5*time.Minute) != nil {
-		log.Debug("skipping duplicate task")
+	if tp.dedup.Add(t.ID(), struct{}{}, 5*time.Minute) != nil {
+		log.Warn("skipping duplicate task")
 		return
 
 	}
@@ -115,11 +124,4 @@ func (tp *TaskPool) LogFields() []any {
 		"num_workers", tp.cfg.NumWorkers,
 		"capacity", tp.cfg.Capacity,
 	}
-}
-
-func typeof(v interface{}) string {
-	if v == nil {
-		return "nil"
-	}
-	return fmt.Sprintf("%T", v)
 }

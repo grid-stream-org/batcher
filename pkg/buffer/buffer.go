@@ -9,22 +9,27 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Buffer[T any] struct {
+type Buffer[T any] interface {
+	Add(data T)
+	Start(ctx context.Context, duration time.Duration)
+	Stop()
+	Flush(ctx context.Context) error
+}
+
+type buffer[T any] struct {
 	mu        sync.Mutex
 	data      []T
 	flushFunc func(ctx context.Context, data []T) error
-	ticker    *time.Ticker
-	wg        sync.WaitGroup
 	log       *slog.Logger
+	cancel    context.CancelFunc
 }
 
-type Option[T any] func(*Buffer[T]) error
+type Option[T any] func(*buffer[T]) error
 
-func New[T any](ctx context.Context, duration time.Duration, offset time.Duration, log *slog.Logger, opts ...Option[T]) (*Buffer[T], error) {
-	buf := &Buffer[T]{
+func New[T any](log *slog.Logger, opts ...Option[T]) (Buffer[T], error) {
+	buf := &buffer[T]{
 		data:      make([]T, 0),
 		flushFunc: func(context.Context, []T) error { return nil },
-		ticker:    time.NewTicker(duration - offset),
 		log:       log.With("component", "buffer"),
 	}
 
@@ -38,7 +43,7 @@ func New[T any](ctx context.Context, duration time.Duration, offset time.Duratio
 }
 
 func WithFlushFunc[T any](f func(ctx context.Context, data []T) error) Option[T] {
-	return func(b *Buffer[T]) error {
+	return func(b *buffer[T]) error {
 		if f == nil {
 			return errors.New("flushFunc cannot be nil")
 		}
@@ -47,24 +52,68 @@ func WithFlushFunc[T any](f func(ctx context.Context, data []T) error) Option[T]
 	}
 }
 
-func (b *Buffer[T]) Add(data T) {
+func (b *buffer[T]) Add(data T) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.data = append(b.data, data)
+	b.mu.Unlock()
 	b.log.Debug("record added to buffer", "buffer_size", len(b.data))
 }
 
-func (b *Buffer[T]) flush(ctx context.Context) error {
-	b.log.Debug("flushing buffer")
+func (b *buffer[T]) Start(ctx context.Context, duration time.Duration) {
+	b.mu.Lock()
+	if b.cancel != nil {
+		b.mu.Unlock()
+		b.log.Warn("buffer already started")
+		return
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	b.cancel = cancel
+	b.mu.Unlock()
+
+	go func() {
+		ticker := time.NewTicker(duration)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				b.log.Debug("context canceled, exiting auto flush")
+				if err := b.Flush(context.Background()); err != nil {
+					b.log.Error("failed to flush buffer during shutdown", "error", err)
+				}
+				return
+			case <-ticker.C:
+				if err := b.Flush(ctx); err != nil {
+					b.log.Error("failed to flush buffer", "error", err)
+				}
+			}
+		}
+	}()
+}
+
+func (b *buffer[T]) Stop() {
+	b.mu.Lock()
+	if b.cancel == nil {
+		b.mu.Unlock()
+		b.log.Warn("buffer not running or already stopped")
+		return
+	}
+	b.cancel()
+	b.cancel = nil
+	b.mu.Unlock()
+	b.log.Debug("buffer stopped")
+}
+
+func (b *buffer[T]) Flush(ctx context.Context) error {
 	b.mu.Lock()
 	if len(b.data) == 0 {
 		b.mu.Unlock()
-		b.log.Debug("skipping; nothing to flush")
+		b.log.Debug("nothing to flush")
 		return nil
 	}
 
 	data := b.data
-	b.data = make([]T, 0)
+	b.data = nil
 	b.mu.Unlock()
 
 	if err := b.flushFunc(ctx, data); err != nil {
@@ -75,25 +124,6 @@ func (b *Buffer[T]) flush(ctx context.Context) error {
 	return nil
 }
 
-func (b *Buffer[T]) AutoFlush(ctx context.Context) {
-	b.log.Info("starting auto flush")
-	defer b.wg.Done()
-
-	for {
-		select {
-		case <-ctx.Done():
-			b.log.Debug("finishing auto flush")
-			return
-		case <-b.ticker.C:
-			b.flush(ctx)
-		}
-	}
-}
-
-func (b *Buffer[T]) Stop() {
-	b.log.Debug("stopping buffer")
-	b.ticker.Stop()
-	b.flush(context.Background()) // Final flush
-	b.wg.Wait()
-	b.log.Debug("buffer stopped")
+func (b *buffer[T]) Data() []T {
+	return b.data
 }

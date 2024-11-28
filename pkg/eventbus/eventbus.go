@@ -6,6 +6,7 @@ type EventBus interface {
 	Subscribe(capacity int) chan any
 	Publish(event any)
 	Unsubscribe(ch chan any)
+	Subscribers() []chan any
 	Close()
 }
 
@@ -14,7 +15,7 @@ type eventBus struct {
 	mu          sync.Mutex
 }
 
-func New() *eventBus {
+func New() EventBus {
 	return &eventBus{
 		subscribers: []chan any{},
 	}
@@ -52,6 +53,10 @@ func (eb *eventBus) Unsubscribe(ch chan any) {
 			break
 		}
 	}
+}
+
+func (eb *eventBus) Subscribers() []chan any {
+	return eb.subscribers
 }
 
 func (eb *eventBus) Close() {

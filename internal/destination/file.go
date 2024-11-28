@@ -1,6 +1,7 @@
 package destination
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
@@ -11,41 +12,53 @@ import (
 )
 
 type fileDestination struct {
-	file    *os.File
-	encoder *json.Encoder
-	log     *slog.Logger
+	file           *os.File
+	encoder        *json.Encoder
+	microbatchDest Destination
+	log            *slog.Logger
 }
 
-func newFileDestination(cfg *config.Destination, log *slog.Logger) (*fileDestination, error) {
+func newFileDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
 	file, err := os.OpenFile(cfg.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	fd := &fileDestination{
+	d := &fileDestination{
 		file:    file,
 		encoder: json.NewEncoder(file),
 		log:     log.With("component", "file_destination"),
 	}
-	fd.encoder.SetIndent("", "	")
-	return fd, nil
+
+	d.encoder.SetIndent("", "	")
+	d.microbatchDest, err = newMicrobatchDestination(ctx, cfg, d.flushFunc, log)
+	return d, errors.WithStack(err)
 }
 
-func (fd *fileDestination) Add(data any) error {
+func (d *fileDestination) Add(data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
 		return errors.Errorf("expected *Outcome, got %T", data)
 	}
-	if err := fd.encoder.Encode(outcome); err != nil {
+	if err := d.encoder.Encode(outcome); err != nil {
 		return errors.WithStack(err)
 	}
 	return nil
 }
 
-func (fd *fileDestination) Close() error {
-	if err := fd.file.Close(); err != nil {
+func (d *fileDestination) Close() error {
+	if err := d.file.Close(); err != nil {
 		return errors.WithStack(err)
 	}
-	fd.log.Info("file destination closed")
+
+	if err := d.microbatchDest.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+
+	d.log.Info("file destination closed")
 	return nil
+}
+
+func (d *fileDestination) flushFunc(ctx context.Context, data []outcome.Outcome) error {
+	return d.encoder.Encode(data)
 }

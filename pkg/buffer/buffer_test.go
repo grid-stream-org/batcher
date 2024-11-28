@@ -1,248 +1,179 @@
 package buffer
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"io"
-// 	"log/slog"
-// 	"sync"
-// 	"testing"
-// 	"time"
+import (
+	"context"
+	"log/slog"
+	"sync"
+	"testing"
+	"time"
 
-// 	"github.com/grid-stream-org/batcher/internal/config"
-// 	"github.com/stretchr/testify/assert"
-// 	"github.com/stretchr/testify/require"
-// )
+	"github.com/stretchr/testify/suite"
+)
 
-// const testTimeout = 500 * time.Millisecond
+type BufferTestSuite struct {
+	suite.Suite
+	ctx    context.Context
+	cancel context.CancelFunc
+}
 
-// func TestNewBuffer(t *testing.T) {
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	tests := []struct {
-// 		name    string
-// 		cfg     config.BufferConfig
-// 		wantErr bool
-// 	}{
-// 		{
-// 			name: "valid config",
-// 			cfg: config.BufferConfig{
-// 				Duration: 100 * time.Millisecond,
-// 				Offset:   10 * time.Millisecond,
-// 				Capacity: 10,
-// 			},
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name: "invalid config - duration <= offset",
-// 			cfg: config.BufferConfig{
-// 				Duration: 10 * time.Millisecond,
-// 				Offset:   10 * time.Millisecond,
-// 			},
-// 			wantErr: true,
-// 		},
-// 	}
+func (s *BufferTestSuite) SetupTest() {
+	s.ctx, s.cancel = context.WithCancel(context.Background())
+}
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 			defer cancel()
+func (s *BufferTestSuite) TearDownTest() {
+	s.cancel()
+}
 
-// 			b, err := New(ctx, &tt.cfg, testLogger)
-// 			if tt.wantErr {
-// 				assert.Error(t, err)
-// 				assert.Nil(t, b)
-// 			} else {
-// 				assert.NoError(t, err)
-// 				assert.NotNil(t, b)
-// 				b.Stop()
-// 			}
-// 		})
-// 	}
-// }
+func (s *BufferTestSuite) TestNew() {
+	testCases := []struct {
+		name        string
+		opts        []Option[int]
+		expectError bool
+	}{
+		{
+			name: "Basic buffer creation",
+		},
+		{
+			name: "With valid flush function",
+			opts: []Option[int]{
+				WithFlushFunc(func(ctx context.Context, data []int) error {
+					return nil
+				}),
+			},
+		},
+		{
+			name: "With nil flush function",
+			opts: []Option[int]{
+				WithFlushFunc[int](nil),
+			},
+			expectError: true,
+		},
+	}
 
-// func TestBuffer_Add(t *testing.T) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 	defer cancel()
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			buf, err := New(slog.Default(), tc.opts...)
+			if tc.expectError {
+				s.Error(err)
+				s.Nil(buf)
+			} else {
+				s.NoError(err)
+				s.NotNil(buf)
+			}
+		})
+	}
+}
 
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	b, err := New(ctx, &config.BufferConfig{
-// 		Duration: 100 * time.Millisecond,
-// 		Offset:   10 * time.Millisecond,
-// 		Capacity: 10,
-// 	}, testLogger)
-// 	require.NoError(t, err)
-// 	defer b.Stop()
+func (s *BufferTestSuite) TestAddAndFlush() {
+	var flushedData []string
+	flushFunc := func(ctx context.Context, data []string) error {
+		flushedData = make([]string, len(data))
+		copy(flushedData, data)
+		return nil
+	}
 
-// 	tests := []struct {
-// 		name    string
-// 		data    []byte
-// 		wantErr bool
-// 	}{
-// 		{
-// 			name:    "valid data",
-// 			data:    []byte("test data"),
-// 			wantErr: false,
-// 		},
-// 		{
-// 			name:    "empty data",
-// 			data:    []byte{},
-// 			wantErr: false,
-// 		},
-// 	}
+	buf, err := New(slog.Default(), WithFlushFunc(flushFunc))
+	s.NoError(err)
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			b.Add(tt.data)
-// 		})
-// 	}
-// }
+	testData := []string{"test1", "test2", "test3"}
+	for _, data := range testData {
+		buf.Add(data)
+	}
 
-// func TestBuffer_Flush(t *testing.T) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 	defer cancel()
+	// First flush should contain our test data
+	err = buf.Flush(context.Background())
+	s.NoError(err)
+	s.Equal(testData, flushedData)
 
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	b, err := New(ctx, &config.BufferConfig{
-// 		Duration: 100 * time.Millisecond,
-// 		Offset:   10 * time.Millisecond,
-// 		Capacity: 10,
-// 	}, testLogger)
-// 	require.NoError(t, err)
-// 	defer b.Stop()
+	// Reset flushedData
+	flushedData = nil
 
-// 	t.Run("flush empty buffer", func(t *testing.T) {
-// 		b.flush()
-// 		select {
-// 		case data := <-b.FlushedData():
-// 			t.Fatalf("Expected no data, but got: %v", data)
-// 		case <-time.After(50 * time.Millisecond):
-// 			// Test passes; no data was flushed
-// 		}
-// 	})
+	// Second flush should be empty since buffer was cleared
+	err = buf.Flush(context.Background())
+	s.NoError(err)
+	s.Empty(flushedData)
+}
 
-// 	t.Run("flush with data", func(t *testing.T) {
-// 		testData := []byte("test data")
-// 		b.Add(testData)
-// 		b.flush()
+func (s *BufferTestSuite) TestStartStop() {
+	var flushedData []int
+	flushFunc := func(ctx context.Context, data []int) error {
+		flushedData = data
+		return nil
+	}
 
-// 		select {
-// 		case data := <-b.FlushedData():
-// 			assert.Len(t, data, 1)
-// 			assert.Equal(t, testData, data[0])
-// 		case <-time.After(50 * time.Millisecond):
-// 			t.Fatal("Expected flushed data, but none received")
-// 		}
-// 	})
-// }
+	buf, err := New(slog.Default(), WithFlushFunc(flushFunc))
+	s.NoError(err)
 
-// func TestBuffer_AutoFlush(t *testing.T) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 	defer cancel()
+	buf.Start(s.ctx, 100*time.Millisecond)
 
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	duration := 100 * time.Millisecond
-// 	b, err := New(ctx, &config.BufferConfig{
-// 		Duration: duration,
-// 		Offset:   10 * time.Millisecond,
-// 		Capacity: 10,
-// 	}, testLogger)
-// 	require.NoError(t, err)
-// 	defer b.Stop()
+	testData := []int{1, 2, 3, 4, 5}
+	for _, d := range testData {
+		buf.Add(d)
+	}
 
-// 	testData := []byte("test data")
-// 	b.Add(testData)
+	time.Sleep(150 * time.Millisecond)
+	buf.Stop()
 
-// 	select {
-// 	case data := <-b.FlushedData():
-// 		assert.Len(t, data, 1)
-// 		assert.Equal(t, testData, data[0])
-// 	case <-time.After(duration * 2):
-// 		t.Fatal("Auto flush timeout")
-// 	}
-// }
+	s.ElementsMatch(testData, flushedData)
 
-// func TestBuffer_Stop(t *testing.T) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 	defer cancel()
+	// Verify no more flushes after stop
+	buf.Add(6)
+	time.Sleep(150 * time.Millisecond)
+	s.NotContains(flushedData, 6)
+}
 
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	b, err := New(ctx, &config.BufferConfig{
-// 		Duration: 100 * time.Millisecond,
-// 		Offset:   10 * time.Millisecond,
-// 		Capacity: 10,
-// 	}, testLogger)
-// 	require.NoError(t, err)
+func (s *BufferTestSuite) TestConcurrentAccess() {
+	var (
+		flushedData []int
+		mu          sync.Mutex
+	)
 
-// 	// Add test data
-// 	b.Add([]byte("test data"))
+	flushFunc := func(ctx context.Context, data []int) error {
+		mu.Lock()
+		flushedData = append(flushedData, data...)
+		mu.Unlock()
+		return nil
+	}
 
-// 	// Start a goroutine to read flushed data
-// 	done := make(chan struct{})
-// 	go func() {
-// 		defer close(done)
-// 		for range b.FlushedData() {
-// 			// Drain the channel
-// 		}
-// 	}()
+	buf, err := New(slog.Default(), WithFlushFunc(flushFunc))
+	s.NoError(err)
 
-// 	b.Stop()
+	buf.Start(s.ctx, 100*time.Millisecond)
 
-// 	// Wait for reader to finish
-// 	select {
-// 	case <-done:
-// 		// Success
-// 	case <-time.After(100 * time.Millisecond):
-// 		t.Fatal("Timeout waiting for buffer to stop")
-// 	}
-// }
+	var wg sync.WaitGroup
+	numWriters := 10
+	itemsPerWriter := 100
 
-// func TestBuffer_ConcurrentAccess(t *testing.T) {
-// 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-// 	defer cancel()
+	for i := 0; i < numWriters; i++ {
+		wg.Add(1)
+		go func(writerID int) {
+			defer wg.Done()
+			for j := 0; j < itemsPerWriter; j++ {
+				buf.Add(writerID*itemsPerWriter + j)
+				time.Sleep(time.Microsecond)
+			}
+		}(i)
+	}
 
-// 	testLogger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
-// 		Level: slog.LevelDebug,
-// 	}))
-// 	b, err := New(ctx, &config.BufferConfig{
-// 		Duration: 100 * time.Millisecond,
-// 		Offset:   10 * time.Millisecond,
-// 		Capacity: 10,
-// 	}, testLogger)
-// 	require.NoError(t, err)
-// 	defer b.Stop()
+	wg.Wait()
+	time.Sleep(200 * time.Millisecond)
+	buf.Stop()
 
-// 	const numGoroutines = 10
-// 	const numOperations = 100
+	mu.Lock()
+	s.Equal(numWriters*itemsPerWriter, len(flushedData))
+	mu.Unlock()
+}
 
-// 	var wg sync.WaitGroup
-// 	wg.Add(numGoroutines)
+func (s *BufferTestSuite) TestDoubleStartStop() {
+	buf, err := New[int](slog.Default())
+	s.NoError(err)
 
-// 	for i := 0; i < numGoroutines; i++ {
-// 		go func(id int) {
-// 			defer wg.Done()
-// 			for j := 0; j < numOperations; j++ {
-// 				b.Add([]byte(fmt.Sprintf("data-%d-%d", id, j)))
-// 			}
-// 		}(i)
-// 	}
+	buf.Start(s.ctx, time.Second)
+	buf.Start(s.ctx, time.Second) // Should not panic
+	buf.Stop()
+	buf.Stop() // Should not panic
+}
 
-// 	wg.Wait()
-// 	b.flush()
-
-// 	select {
-// 	case data := <-b.FlushedData():
-// 		assert.Len(t, data, numGoroutines*numOperations)
-// 	case <-time.After(100 * time.Millisecond):
-// 		t.Fatal("Expected flushed data, but none received")
-// 	}
-// }
+func TestBufferSuite(t *testing.T) {
+	suite.Run(t, new(BufferTestSuite))
+}
