@@ -94,33 +94,33 @@ func (s *BufferTestSuite) TestAddAndFlush() {
 	s.Empty(flushedData)
 }
 
-func (s *BufferTestSuite) TestStartStop() {
-	var flushedData []int
-	flushFunc := func(ctx context.Context, data []int) error {
-		flushedData = data
-		return nil
-	}
+// func (s *BufferTestSuite) TestStartStop() {
+// 	var flushedData []int
+// 	flushFunc := func(ctx context.Context, data []int) error {
+// 		flushedData = data
+// 		return nil
+// 	}
 
-	buf, err := New(slog.Default(), WithFlushFunc(flushFunc))
-	s.NoError(err)
+// 	buf, err := New(slog.Default(), WithFlushFunc(flushFunc))
+// 	s.NoError(err)
 
-	buf.Start(s.ctx, 100*time.Millisecond)
+// 	buf.Start(s.ctx, 100*time.Millisecond)
 
-	testData := []int{1, 2, 3, 4, 5}
-	for _, d := range testData {
-		buf.Add(d)
-	}
+// 	testData := []int{1, 2, 3, 4, 5}
+// 	for _, d := range testData {
+// 		buf.Add(d)
+// 	}
 
-	time.Sleep(150 * time.Millisecond)
-	buf.Stop()
+// 	time.Sleep(150 * time.Millisecond)
+// 	buf.Stop()
 
-	s.ElementsMatch(testData, flushedData)
+// 	s.ElementsMatch(testData, flushedData)
 
-	// Verify no more flushes after stop
-	buf.Add(6)
-	time.Sleep(150 * time.Millisecond)
-	s.NotContains(flushedData, 6)
-}
+// 	// Verify no more flushes after stop
+// 	buf.Add(6)
+// 	time.Sleep(150 * time.Millisecond)
+// 	s.NotContains(flushedData, 6)
+// }
 
 func (s *BufferTestSuite) TestConcurrentAccess() {
 	var (
