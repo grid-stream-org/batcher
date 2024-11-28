@@ -31,8 +31,7 @@ func newStdoutDestination(ctx context.Context, cfg *config.Destination, log *slo
 }
 
 func (d *stdoutDestination) Add(data any) error {
-	d.microbatchDest.Add(data)
-	return nil
+	return d.microbatchDest.Add(data)
 }
 
 func (d *stdoutDestination) Close() error {
