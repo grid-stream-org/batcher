@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/grid-stream-org/batcher/batcher"
+	"github.com/grid-stream-org/batcher/internal/batcher"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/metrics"
 	"github.com/grid-stream-org/batcher/pkg/logger"
