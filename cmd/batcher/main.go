@@ -47,11 +47,7 @@ func run() (err error) {
 	// Initialize Prometheus metrics
 	metrics.InitMetricsProvider()
 	http.Handle("/metrics", promhttp.Handler())
-	go func() {
-		if err := http.ListenAndServe(":2112", nil); err != nil {
-			log.Warn("metrics server failed to start; metrics will not be collected", "reason", err)
-		}
-	}()
+	go metricsListenAndServe(log)
 
 	// Create batcher
 	batcher, err := batcher.New(ctx, cfg, log)
@@ -102,4 +98,10 @@ func handleErrors(err error, log *slog.Logger) int {
 		}
 	}
 	return exitCode
+}
+
+func metricsListenAndServe(log *slog.Logger) {
+	if err := http.ListenAndServe(":2112", nil); err != nil {
+		log.Warn("metrics server failed to start; metrics will not be collected", "reason", err)
+	}
 }

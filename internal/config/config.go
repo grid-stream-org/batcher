@@ -1,9 +1,12 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
+	"github.com/grid-stream-org/batcher/pkg/bqclient"
 	"github.com/grid-stream-org/batcher/pkg/logger"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/file"
@@ -29,15 +32,16 @@ type Pool struct {
 }
 
 type Destination struct {
-	Type     string    `koanf:"type"`
-	Path     string    `koanf:"path"`
-	Buffer   *Buffer   `koanf:"buffer"`
-	Database *Database `koanf:"database"`
+	Type     string           `koanf:"type"`
+	Path     string           `koanf:"path"`
+	Buffer   *Buffer          `koanf:"buffer"`
+	Database *bqclient.Config `koanf:"database"`
 }
 
 type Buffer struct {
-	Duration time.Duration `koanf:"duration"`
-	Offset   time.Duration `koanf:"offset"`
+	StartTime time.Time     `koanf:"start_time"`
+	Interval  time.Duration `koanf:"interval"`
+	Offset    time.Duration `koanf:"offset"`
 }
 
 type MQTT struct {
@@ -54,12 +58,6 @@ type MTLS struct {
 	CertFile string `koanf:"cert_file"`
 	KeyFile  string `koanf:"key_file"`
 	CAFile   string `koanf:"ca_file"`
-}
-
-type Database struct {
-	ProjectID string `koanf:"project_id"`
-	DatasetID string `koanf:"dataset_id"`
-	CredsPath string `koanf:"creds_path"`
 }
 
 func Load() (*Config, error) {
@@ -103,20 +101,63 @@ func (c *Config) Validate() error {
 }
 
 func (d *Destination) validate() error {
-	if d.Type == "file" && d.Path == "" {
-		return errors.New("file path required when type is 'file'")
+	if d.Type == "" {
+		return errors.New("destination type is required")
 	}
+
+	validTypes := []string{
+		"file",
+		"database",
+		"stdout",
+	}
+	if !slices.Contains(validTypes, d.Type) {
+		return errors.Errorf("invalid destination type: %s", d.Type)
+	}
+
+	if d.Type == "file" {
+		if d.Path == "" {
+			return errors.New("file path required when destination is 'file'")
+		}
+
+		dirPath := filepath.Dir(d.Path)
+		info, err := os.Stat(dirPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return errors.Errorf("directory does not exist: %s", dirPath)
+			}
+			return errors.WithStack(err)
+		}
+
+		if !info.IsDir() {
+			return errors.Errorf("path is not a directory: %s", dirPath)
+		}
+	}
+
 	if d.Type == "database" {
+		if d.Database == nil {
+			return errors.New("database configuration required when type is 'database'")
+		}
 		if d.Database.ProjectID == "" {
-			return errors.New("database config required when type is database")
-		}
-		if d.Buffer.Duration < 1 {
-			return errors.New("buffer duration must be positive when buffer enabled")
-		}
-		if d.Buffer.Offset > d.Buffer.Duration {
-			return errors.New("buffer duration must be greater than offset")
+			return errors.New("database project ID required when type is 'database'")
 		}
 	}
+
+	if d.Buffer == nil {
+		return errors.New("buffer configuration required when type is 'database'")
+	}
+	if d.Buffer.Interval <= 0 {
+		return errors.New("buffer interval must be positive")
+	}
+	if d.Buffer.Offset < 0 {
+		return errors.New("buffer offset cannot be negative")
+	}
+	if d.Buffer.Offset >= d.Buffer.Interval {
+		return errors.New("buffer offset must be less than interval")
+	}
+	if d.Buffer.StartTime.IsZero() {
+		return errors.New("buffer start time required")
+	}
+
 	return nil
 }
 

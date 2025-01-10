@@ -28,7 +28,7 @@ type RealTimeDERData struct {
 	IsOnline          bool      `bigquery:"is_online" json:"is_online"`
 	IsStandalone      bool      `bigquery:"is_standalone" json:"is_standalone"`
 	ConnectionStartAt string    `bigquery:"connection_start_at" json:"connection_start_at"`
-	CurrentSoc        float64   `bigquery:"current_soc" json:"current_soc"`
+	CurrentSoc        int       `bigquery:"current_soc" json:"current_soc"`
 }
 
 type AggregateAverageOutput struct {

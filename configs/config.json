@@ -10,7 +10,8 @@
     "type": "stdout",
     "path": "./out/batcher.log",
     "buffer": {
-      "duration": "5m",
+      "start_time": "2025-01-09T19:56:49Z",
+      "interval": "5m",
       "offset": "1s"
     },
     "database": {
@@ -20,11 +21,11 @@
   }
   },
   "mqtt": {
-    "host": "2fc0554ad38e4185a74476dae4f0a22f.s1.eu.hivemq.cloud",
+    "host": "REDACTED",
     "port": 8883,
-    "username": "gridstream",
-    "password": "3^@kfZFyu$&&AU@&d@z2t9@$#",
-    "qos": 1,
+    "username": "REDACTED",
+    "password": "REDACTED",
+    "qos": 2,
     "m_tls": {
       "enabled": false,
       "cert_file": "REDACTED",
@@ -33,7 +34,7 @@
     }
   },
   "log": {
-    "level": "INFO",
+    "level": "DEBUG",
     "format": "json",
     "output": "stdout"
   }

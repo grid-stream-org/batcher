@@ -16,24 +16,28 @@ type BQClient interface {
 	Close() error
 }
 
-type bqClient struct {
-	projectID string
-	datasetID string
-	client    *bigquery.Client
-	log       *slog.Logger
+type Config struct {
+	ProjectID string
+	DatasetID string
+	CredsPath string
 }
 
-func New(ctx context.Context, projectID string, datasetID string, credsPath string, log *slog.Logger) (BQClient, error) {
-	bq, err := bigquery.NewClient(ctx, projectID, option.WithCredentialsFile(credsPath))
+type bqClient struct {
+	cfg    *Config
+	client *bigquery.Client
+	log    *slog.Logger
+}
+
+func New(ctx context.Context, cfg *Config, log *slog.Logger) (BQClient, error) {
+	bq, err := bigquery.NewClient(ctx, cfg.ProjectID, option.WithCredentialsFile(cfg.CredsPath))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
 	c := &bqClient{
-		projectID: projectID,
-		datasetID: datasetID,
-		client:    bq,
-		log:       log.With("component", "bigquery", "project", projectID, "dataset", datasetID),
+		cfg:    cfg,
+		client: bq,
+		log:    log.With("component", "bigquery", "project", cfg.ProjectID, "dataset", cfg.DatasetID),
 	}
 	c.log.Debug("bigquery client created")
 	return c, nil
@@ -73,7 +77,7 @@ func (c *bqClient) PutAll(ctx context.Context, inputs map[string][]any) error {
 }
 
 func (c *bqClient) Inserter(table string) *bigquery.Inserter {
-	inserter := c.client.Dataset(c.datasetID).Table(table).Inserter()
+	inserter := c.client.Dataset(c.cfg.DatasetID).Table(table).Inserter()
 	inserter.SkipInvalidRows = false
 	inserter.IgnoreUnknownValues = false
 	return inserter

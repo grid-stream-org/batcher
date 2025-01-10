@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/pkg/bqclient"
@@ -11,14 +12,13 @@ import (
 )
 
 type databaseDestination struct {
-	client         bqclient.BQClient
-	microbatchDest Destination
-	log            *slog.Logger
+	client bqclient.BQClient
+	buf    *buffer.Buffer
+	log    *slog.Logger
 }
 
 func newDatabaseDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
-	// TODO make public config
-	client, err := bqclient.New(ctx, cfg.Database.ProjectID, cfg.Database.DatasetID, cfg.Database.CredsPath, log)
+	client, err := bqclient.New(ctx, cfg.Database, log)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -28,12 +28,17 @@ func newDatabaseDestination(ctx context.Context, cfg *config.Destination, log *s
 		log:    log.With("component", "database_destination"),
 	}
 
-	d.microbatchDest, err = newMicrobatchDestination(ctx, cfg, d.flushFunc, log)
+	d.buf = buffer.New(cfg.Buffer, d.flushFunc, log)
 	return d, errors.WithStack(err)
 }
 
 func (d *databaseDestination) Add(data any) error {
-	return d.microbatchDest.Add(data)
+	outcome, ok := data.(*outcome.Outcome)
+	if !ok {
+		return errors.Errorf("expected *outcome.Outcome, got %T", data)
+	}
+	d.buf.Add(outcome)
+	return nil
 }
 
 func (d *databaseDestination) Close() error {
@@ -41,15 +46,12 @@ func (d *databaseDestination) Close() error {
 		return errors.WithStack(err)
 	}
 
-	if err := d.microbatchDest.Close(); err != nil {
-		return errors.WithStack(err)
-	}
-
+	d.buf.Stop()
 	d.log.Info("database destination closed")
 	return nil
 }
 
-func (d *databaseDestination) flushFunc(ctx context.Context, data []outcome.Outcome) error {
-	// TODO
+func (d *databaseDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
+
 	return nil
 }

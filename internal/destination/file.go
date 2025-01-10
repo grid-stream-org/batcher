@@ -6,16 +6,17 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/pkg/errors"
 )
 
 type fileDestination struct {
-	file           *os.File
-	encoder        *json.Encoder
-	microbatchDest Destination
-	log            *slog.Logger
+	file    *os.File
+	encoder *json.Encoder
+	buf     *buffer.Buffer
+	log     *slog.Logger
 }
 
 func newFileDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
@@ -30,19 +31,18 @@ func newFileDestination(ctx context.Context, cfg *config.Destination, log *slog.
 		log:     log.With("component", "file_destination"),
 	}
 
+	d.buf = buffer.New(cfg.Buffer, d.flushFunc, log)
 	d.encoder.SetIndent("", "	")
-	d.microbatchDest, err = newMicrobatchDestination(ctx, cfg, d.flushFunc, log)
-	return d, errors.WithStack(err)
+	d.buf.Start(ctx)
+	return d, nil
 }
 
 func (d *fileDestination) Add(data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
-		return errors.Errorf("expected *Outcome, got %T", data)
+		return errors.Errorf("expected *outcome.Outcome, got %T", data)
 	}
-	if err := d.encoder.Encode(outcome); err != nil {
-		return errors.WithStack(err)
-	}
+	d.buf.Add(outcome)
 	return nil
 }
 
@@ -51,14 +51,11 @@ func (d *fileDestination) Close() error {
 		return errors.WithStack(err)
 	}
 
-	if err := d.microbatchDest.Close(); err != nil {
-		return errors.WithStack(err)
-	}
-
+	d.buf.Stop()
 	d.log.Info("file destination closed")
 	return nil
 }
 
-func (d *fileDestination) flushFunc(ctx context.Context, data []outcome.Outcome) error {
+func (d *fileDestination) flushFunc(_ context.Context, data *buffer.FlushOutcome) error {
 	return d.encoder.Encode(data)
 }

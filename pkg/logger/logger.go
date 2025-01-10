@@ -34,7 +34,7 @@ func New(cfg *Config, ow io.Writer) (*slog.Logger, error) {
 	}
 
 	log := slog.New(cfg.SlogHandler(output))
-	log.Info("Logger initialized", "level", cfg.Level, "format", cfg.Format, "output", cfg.Output)
+	log.Info("logger initialized", "level", cfg.Level, "format", cfg.Format, "output", cfg.Output)
 	return log, nil
 }
 

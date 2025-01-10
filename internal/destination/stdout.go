@@ -6,44 +6,42 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/pkg/errors"
 )
 
 type stdoutDestination struct {
-	microbatchDest Destination
-	log            *slog.Logger
+	buf *buffer.Buffer
+	log *slog.Logger
 }
 
 func newStdoutDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
 	d := &stdoutDestination{
 		log: log.With("component", "stdout_destination"),
 	}
-
-	microbatchDest, err := newMicrobatchDestination(ctx, cfg, d.flushFunc, log)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	d.microbatchDest = microbatchDest
-	return d, errors.WithStack(err)
+	d.buf = buffer.New(cfg.Buffer, d.flushFunc, log)
+	d.buf.Start(ctx)
+	return d, nil
 }
 
 func (d *stdoutDestination) Add(data any) error {
-	return d.microbatchDest.Add(data)
+	outcome, ok := data.(*outcome.Outcome)
+	if !ok {
+		return errors.Errorf("expected *outcome.Outcome, got %T", data)
+	}
+	d.buf.Add(outcome)
+	return nil
 }
 
 func (d *stdoutDestination) Close() error {
-	if err := d.microbatchDest.Close(); err != nil {
-		return errors.WithStack(err)
-	}
-
+	d.buf.Stop()
 	d.log.Info("stdout destination closed")
 	return nil
 }
 
-func (d *stdoutDestination) flushFunc(ctx context.Context, data []outcome.Outcome) error {
+func (d *stdoutDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
 	out, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return errors.WithStack(err)

@@ -12,15 +12,10 @@ type AvgCache struct {
 	stop     chan struct{}
 }
 
-func NewAvgCache(cleanupInterval time.Duration) *AvgCache {
+func NewAvgCache() *AvgCache {
 	ac := &AvgCache{
-		items:    make(map[string]*RunningAvg),
-		interval: cleanupInterval,
-		stop:     make(chan struct{}),
-	}
-
-	if cleanupInterval > 0 {
-		go ac.cleanupLoop()
+		items: make(map[string]*RunningAvg),
+		stop:  make(chan struct{}),
 	}
 
 	return ac
@@ -64,43 +59,20 @@ func (ac *AvgCache) Delete(k string) {
 	delete(ac.items, k)
 }
 
-func (ac *AvgCache) Reset(k string) {
+func (ac *AvgCache) Reset() {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 
-	if avg, ok := ac.items[k]; ok {
+	for _, avg := range ac.items {
 		avg.Reset()
 	}
 }
 
-func (ac *AvgCache) cleanup() {
-	ac.mu.Lock()
-	defer ac.mu.Unlock()
-
-	if ac.interval <= 0 {
-		return
-	}
-
-	for k := range ac.items {
-		delete(ac.items, k)
-	}
-}
-
-func (ac *AvgCache) cleanupLoop() {
-	ticker := time.NewTicker(ac.interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			ac.cleanup()
-		case <-ac.stop:
-			return
-		}
-	}
-}
-
 func (ac *AvgCache) Close() {
+	for k := range ac.items {
+		ac.Delete(k)
+	}
+
 	if ac.interval > 0 {
 		close(ac.stop)
 	}

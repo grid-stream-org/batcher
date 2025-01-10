@@ -56,7 +56,7 @@ func (tp *TaskPool) Submit(t any) {
 func (tp *TaskPool) submitTask(t Task) {
 	log := tp.log.With(t.LogFields()...)
 	log.Debug("received task from event bus")
-	if tp.dedup.Add(t.ID(), struct{}{}, 5*time.Minute) != nil {
+	if tp.dedup.Add(t.id, struct{}{}, 5*time.Minute) != nil {
 		log.Warn("skipping duplicate task")
 		return
 
