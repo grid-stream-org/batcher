@@ -8,7 +8,7 @@ import (
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
-	"github.com/grid-stream-org/batcher/internal/stats"
+	"github.com/grid-stream-org/batcher/pkg/stats"
 	"github.com/pkg/errors"
 )
 

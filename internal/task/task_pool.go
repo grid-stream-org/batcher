@@ -2,13 +2,13 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/destination"
-	"github.com/grid-stream-org/batcher/internal/utils"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 )
@@ -47,7 +47,7 @@ func NewTaskPool(
 func (tp *TaskPool) Submit(t any) {
 	task, ok := t.(Task)
 	if !ok {
-		tp.log.Warn("received non-task event", "type", utils.TypeOf(t))
+		tp.log.Warn("received non-task event", "type", fmt.Sprintf("%T", t))
 		return
 	}
 	tp.submitTask(task)
