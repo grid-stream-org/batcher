@@ -1,89 +1,182 @@
 package config
 
 import (
-	"log"
+	"os"
+	"path/filepath"
+	"slices"
 	"time"
 
+	"github.com/grid-stream-org/batcher/pkg/bqclient"
+	"github.com/grid-stream-org/batcher/pkg/logger"
+	"github.com/knadh/koanf/parsers/json"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 	"github.com/pkg/errors"
-
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 )
 
 type Config struct {
-	MQTT       MQTTConfig   `envconfig:"MQTT"`
-	DB         DBConfig     `envconfig:"DB"`
-	Buffer     BufferConfig `envconfig:"BUFFER"`
-	Logger     LoggerConfig `envconfig:"LOG"`
-	NumWorkers int          `envconfig:"NUM_WORKERS" default:"2"`
+	Batcher     *Batcher       `koanf:"batcher"`
+	Pool        *Pool          `koanf:"pool"`
+	Destination *Destination   `koanf:"destination"`
+	MQTT        *MQTT          `koanf:"mqtt"`
+	Log         *logger.Config `koanf:"log"`
 }
 
-type BufferConfig struct {
-	Duration time.Duration `envconfig:"DURATION" default:"5m"`
-	Offset   time.Duration `envconfig:"OFFSET" default:"1s"`
-	Capacity int           `envconfig:"CAPACITY" default:"10"`
+type Batcher struct {
+	Timeout time.Duration `koanf:"timeout"`
 }
 
-type MQTTConfig struct {
-	Host          string `envconfig:"HOST" required:"true"`
-	Port          int    `envconfig:"PORT" required:"true"`
-	Username      string `envconfig:"USERNAME" required:"true"`
-	Password      string `envconfig:"PASSWORD" required:"true"`
-	QOS           int    `envconfig:"QOS" default:"1"`
-	SkipVerify    bool   `envconfig:"SKIP_VERIFY" default:"false"`
-	CertFile      string `envconfig:"CERT_FILE"`
-	KeyFile       string `envconfig:"KEY_FILE"`
-	CAFile        string `envconfig:"CA_FILE"`
-	PartitionMode bool   `envconfig:"PARTITION_MODE" default:"false"`
-	Partition     int    `envconfig:"PARTITION" default:"0"`
-	NumPartitions int    `envconfig:"NUM_PARTITIONS" default:"1"`
+type Pool struct {
+	NumWorkers int `koanf:"num_workers"`
+	Capacity   int `koanf:"capacity"`
 }
 
-type DBConfig struct {
-	ProjectID string `envconfig:"PROJECT_ID" required:"true"`
-	DatasetID string `envconfig:"DATASET_ID" required:"true"`
-	TableID   string `envconfig:"TABLE_ID" required:"true"`
-	CredsPath string `envconfig:"CREDENTIALS_PATH" required:"true"`
+type Destination struct {
+	Type     string           `koanf:"type"`
+	Path     string           `koanf:"path"`
+	Buffer   *Buffer          `koanf:"buffer"`
+	Database *bqclient.Config `koanf:"database"`
 }
 
-type LoggerConfig struct {
-	Level  string `envconfig:"LEVEL" default:"INFO"`
-	Format string `envconfig:"FORMAT" default:"text"`
-	Output string `envconfig:"OUTPUT" default:"stdout"`
+type Buffer struct {
+	StartTime time.Time     `koanf:"start_time"`
+	Interval  time.Duration `koanf:"interval"`
+	Offset    time.Duration `koanf:"offset"`
+}
+
+type MQTT struct {
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	QoS      int    `koanf:"qos"`
+	MTLS     *MTLS  `koanf:"m_tls"`
+}
+
+type MTLS struct {
+	Enabled  bool   `koanf:"enabled"`
+	CertFile string `koanf:"cert_file"`
+	KeyFile  string `koanf:"key_file"`
+	CAFile   string `koanf:"ca_file"`
 }
 
 func Load() (*Config, error) {
-	if err := godotenv.Load(); err != nil {
-		log.Printf(".env file not found, proceeding with environment variables")
+	k := koanf.New(".")
+	path := filepath.Join("configs", "config.json")
+	if err := k.Load(file.Provider(path), json.Parser()); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	var cfg Config
-	if err := envconfig.Process("", &cfg); err != nil {
-		return nil, err
+	if err := k.Unmarshal("", &cfg); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
-	if err := validate(&cfg); err != nil {
-		return nil, err
+	if err := cfg.Validate(); err != nil {
+		return nil, errors.WithStack(err)
 	}
 
 	return &cfg, nil
 }
 
-func validate(cfg *Config) error {
-	if cfg.Buffer.Duration <= cfg.Buffer.Offset {
-		return errors.New("buffer duration must be greater than offset")
+func (c *Config) Validate() error {
+	if c.Pool.NumWorkers < 1 {
+		c.Pool.NumWorkers = 1
+	}
+	if c.Pool.Capacity < 0 {
+		c.Pool.Capacity = 0
 	}
 
-	if cfg.MQTT.PartitionMode && cfg.MQTT.NumPartitions <= 0 {
-		return errors.New("num_partitions must be positive when partition_mode is enabled")
+	if err := c.Destination.validate(); err != nil {
+		return errors.Wrap(err, "destination config")
+	}
+	if err := c.MQTT.validate(); err != nil {
+		return errors.Wrap(err, "mqtt config")
+	}
+	if err := c.Log.Validate(); err != nil {
+		return errors.Wrap(err, "log config")
 	}
 
-	if cfg.MQTT.SkipVerify {
-		if cfg.MQTT.CertFile != "" && cfg.MQTT.KeyFile == "" {
-			return errors.New("key file required when cert file provided")
+	return nil
+}
+
+func (d *Destination) validate() error {
+	if d.Type == "" {
+		return errors.New("destination type is required")
+	}
+
+	validTypes := []string{
+		"file",
+		"database",
+		"stdout",
+	}
+	if !slices.Contains(validTypes, d.Type) {
+		return errors.Errorf("invalid destination type: %s", d.Type)
+	}
+
+	if d.Type == "file" {
+		if d.Path == "" {
+			return errors.New("file path required when destination is 'file'")
 		}
-		if cfg.MQTT.KeyFile != "" && cfg.MQTT.CertFile == "" {
-			return errors.New("cert file required when key file provided")
+
+		dirPath := filepath.Dir(d.Path)
+		info, err := os.Stat(dirPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return errors.Errorf("directory does not exist: %s", dirPath)
+			}
+			return errors.WithStack(err)
+		}
+
+		if !info.IsDir() {
+			return errors.Errorf("path is not a directory: %s", dirPath)
+		}
+	}
+
+	if d.Type == "database" {
+		if d.Database == nil {
+			return errors.New("database configuration required when type is 'database'")
+		}
+		if d.Database.ProjectID == "" {
+			return errors.New("database project ID required when type is 'database'")
+		}
+	}
+
+	if d.Buffer == nil {
+		return errors.New("buffer configuration required when type is 'database'")
+	}
+	if d.Buffer.Interval <= 0 {
+		return errors.New("buffer interval must be positive")
+	}
+	if d.Buffer.Offset < 0 {
+		return errors.New("buffer offset cannot be negative")
+	}
+	if d.Buffer.Offset >= d.Buffer.Interval {
+		return errors.New("buffer offset must be less than interval")
+	}
+	if d.Buffer.StartTime.IsZero() {
+		return errors.New("buffer start time required")
+	}
+
+	return nil
+}
+
+func (m *MQTT) validate() error {
+	if m.Port < 1 || m.Port > 65535 {
+		return errors.New("port must be between 1 and 65535")
+	}
+	if m.QoS < 0 || m.QoS > 2 {
+		return errors.New("qos must be between 0 and 2")
+	}
+	if m.MTLS.Enabled {
+		if m.MTLS.CertFile == "" {
+			return errors.New("cert_file required when mtls enabled")
+		}
+		if m.MTLS.KeyFile == "" {
+			return errors.New("key_file required when mtls enabled")
+		}
+		if m.MTLS.CAFile == "" {
+			return errors.New("ca_file required when mtls enabled")
 		}
 	}
 	return nil

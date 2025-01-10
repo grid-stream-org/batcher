@@ -3,69 +3,105 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/pkg/errors"
-
-	"github.com/grid-stream-org/batcher/internal/buffer"
+	"github.com/grid-stream-org/batcher/internal/batcher"
 	"github.com/grid-stream-org/batcher/internal/config"
-	"github.com/grid-stream-org/batcher/internal/logger"
-	"github.com/grid-stream-org/batcher/internal/mqtt"
 	"github.com/grid-stream-org/batcher/metrics"
+	"github.com/grid-stream-org/batcher/pkg/logger"
+	"github.com/grid-stream-org/batcher/pkg/sigctx"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/multierr"
 )
 
 func main() {
+	log := logger.Default()
+	exitCode := 0
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+		exitCode = handleErrors(err, log)
 	}
+	log.Info("Done", "exitCode", exitCode)
+	os.Exit(exitCode)
 }
 
-func run() error {
-	// Set up signal handling with context
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+func run() (err error) {
+	// Set up our signal handler
+	ctx, cancel := sigctx.New(context.Background())
 	defer cancel()
 
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
-		return errors.Wrap(err, "loading config")
+		return err
 	}
 
 	// Initialize logger
-	log, err := logger.Init(&cfg.Logger, nil)
+	log, err := logger.New(cfg.Log, nil)
 	if err != nil {
-		return errors.Wrap(err, "initializing logger")
+		return err
 	}
 
-	// Initialize prometheus metrics
+	// Initialize Prometheus metrics
 	metrics.InitMetricsProvider()
-
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":2112", nil)
+	go metricsListenAndServe(log)
 
-	// Initialize the buffer
-	buf, err := buffer.New(ctx, &cfg.Buffer, log)
+	// Create batcher
+	batcher, err := batcher.New(ctx, cfg, log)
 	if err != nil {
-		return errors.Wrap(err, "initializing buffer")
+		return err
 	}
 
-	// Initialize MQTT client
-	mqtt, err := mqtt.NewClient(ctx, &cfg.MQTT, buf, log)
-	if err != nil {
-		return errors.Wrap(err, "initializing mqtt client")
+	// Check for timeout
+	// Do not return the context cancellation error because we suppress them (to account for signals)
+	if cfg.Batcher.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, cfg.Batcher.Timeout)
+		defer cancel()
 	}
 
-	// Wait for shutdown signal
-	log.Info("Application is running...")
-	<-ctx.Done()
+	// Run batcher
+	err = batcher.Run(ctx)
 
-	log.Info("Shutting down...")
-	buf.Stop()
-	mqtt.Stop()
-	return nil
+	// Check for timeout
+	if errors.Is(err, context.DeadlineExceeded) {
+		return errors.Errorf("Batcher timed out after %s", cfg.Batcher.Timeout)
+	}
+
+	return err
+}
+
+func handleErrors(err error, log *slog.Logger) int {
+	if err == nil {
+		return 0
+	}
+	var exitCode int
+	errs := []error{}
+	// Filter and process errors
+	for _, mErr := range multierr.Errors(err) {
+		var sigErr *sigctx.SignalError
+		if errors.As(mErr, &sigErr) {
+			exitCode = sigErr.SigNum()
+		} else if !errors.Is(mErr, context.Canceled) {
+			errs = append(errs, mErr)
+		}
+	}
+	// Log non-signal errors
+	if len(errs) > 0 {
+		for _, err := range errs {
+			log.Error("error occurred", "error", err, "stack", fmt.Sprintf("%+v", err))
+		}
+		if exitCode == 0 {
+			exitCode = 255
+		}
+	}
+	return exitCode
+}
+
+func metricsListenAndServe(log *slog.Logger) {
+	if err := http.ListenAndServe(":2112", nil); err != nil {
+		log.Warn("metrics server failed to start; metrics will not be collected", "reason", err)
+	}
 }

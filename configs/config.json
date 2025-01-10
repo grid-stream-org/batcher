@@ -1,0 +1,42 @@
+{
+  "batcher": {
+     "timeout": "6h"
+  },
+  "pool": {
+    "num_workers": 5,
+    "capacity": 300
+  },
+  "destination": {
+    "type": "stdout",
+    "path": "./out/batcher.log",
+    "buffer": {
+      "start_time": "2025-01-09T19:56:49Z",
+      "interval": "5m",
+      "offset": "1s"
+    },
+    "database": {
+      "project_id": "REDACTED",
+      "dataset_id": "REDACTED",
+      "creds_path": "REDACTED"
+  }
+  },
+  "mqtt": {
+    "host": "REDACTED",
+    "port": 8883,
+    "username": "REDACTED",
+    "password": "REDACTED",
+    "qos": 2,
+    "m_tls": {
+      "enabled": false,
+      "cert_file": "REDACTED",
+      "key_file": "REDACTED",
+      "ca_file": "REDACTED"
+    }
+  },
+  "log": {
+    "level": "DEBUG",
+    "format": "json",
+    "output": "stdout"
+  }
+}
+
