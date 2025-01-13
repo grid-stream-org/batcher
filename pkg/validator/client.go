@@ -94,10 +94,10 @@ func (c *Config) Validate() error {
 
 	if c.TLSConfig != nil && c.TLSConfig.Enabled {
 		if c.TLSConfig.CertPath == "" {
-			return errors.New("cert_path must be provided when TLS is enabled")
+			return errors.New("cert_path required when tls is enabled")
 		}
 		if c.TLSConfig.KeyPath == "" {
-			return errors.New("key_path must be provided when TLS is enabled")
+			return errors.New("key_path required when tls is enabled")
 		}
 	}
 

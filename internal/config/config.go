@@ -46,19 +46,18 @@ type Buffer struct {
 }
 
 type MQTT struct {
-	Host     string `koanf:"host"`
-	Port     int    `koanf:"port"`
-	Username string `koanf:"username"`
-	Password string `koanf:"password"`
-	QoS      int    `koanf:"qos"`
-	MTLS     *MTLS  `koanf:"m_tls"`
+	Host      string     `koanf:"host"`
+	Port      int        `koanf:"port"`
+	Username  string     `koanf:"username"`
+	Password  string     `koanf:"password"`
+	QoS       int        `koanf:"qos"`
+	TLSConfig *TLSConfig `koanf:"tls"`
 }
 
-type MTLS struct {
+type TLSConfig struct {
 	Enabled  bool   `koanf:"enabled"`
-	CertFile string `koanf:"cert_file"`
-	KeyFile  string `koanf:"key_file"`
-	CAFile   string `koanf:"ca_file"`
+	CertPath string `koanf:"cert_path"`
+	KeyPath  string `koanf:"key_path"`
 }
 
 func Load() (*Config, error) {
@@ -156,15 +155,12 @@ func (m *MQTT) validate() error {
 	if m.QoS < 0 || m.QoS > 2 {
 		return errors.New("qos must be between 0 and 2")
 	}
-	if m.MTLS.Enabled {
-		if m.MTLS.CertFile == "" {
-			return errors.New("cert_file required when mtls enabled")
+	if m.TLSConfig.Enabled {
+		if m.TLSConfig.CertPath == "" {
+			return errors.New("cert_path required when tls is enabled")
 		}
-		if m.MTLS.KeyFile == "" {
-			return errors.New("key_file required when mtls enabled")
-		}
-		if m.MTLS.CAFile == "" {
-			return errors.New("ca_file required when mtls enabled")
+		if m.TLSConfig.KeyPath == "" {
+			return errors.New("key_path required when tls is enabled")
 		}
 	}
 	return nil

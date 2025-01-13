@@ -35,11 +35,10 @@
     "username": "REDACTED",
     "password": "REDACTED",
     "qos": 2,
-    "m_tls": {
+    "tls": {
       "enabled": false,
-      "cert_file": "REDACTED",
-      "key_file": "REDACTED",
-      "ca_file": "REDACTED"
+      "cert_path": "REDACTED",
+      "key_path": "REDACTED"    
     }
   },
   "log": {

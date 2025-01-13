@@ -2,10 +2,9 @@ package mqtt
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"log/slog"
-	"os"
+	"path/filepath"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
@@ -79,26 +78,18 @@ func createClientOptions(cfg *config.MQTT, log *slog.Logger) (*mqtt.ClientOption
 		})
 
 	tlsCfg := &tls.Config{
-		InsecureSkipVerify: cfg.MTLS.Enabled,
+		InsecureSkipVerify: cfg.TLSConfig.Enabled,
 	}
 
 	if tlsCfg.InsecureSkipVerify {
-		cert, err := tls.LoadX509KeyPair(cfg.MTLS.CertFile, cfg.MTLS.KeyFile)
+		cert, err := tls.LoadX509KeyPair(
+			filepath.Clean(cfg.TLSConfig.CertPath),
+			filepath.Clean(cfg.TLSConfig.KeyPath),
+		)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
 		tlsCfg.Certificates = []tls.Certificate{cert}
-
-		caCert, err := os.ReadFile(cfg.MTLS.CAFile)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-
-		caCertPool := x509.NewCertPool()
-		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return nil, errors.WithStack(err)
-		}
-		tlsCfg.RootCAs = caCertPool
 	}
 	opts.SetTLSConfig(tlsCfg)
 	return opts, nil
