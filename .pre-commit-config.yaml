@@ -4,12 +4,3 @@ repos:
   hooks:
     - id: go-fmt
     - id: go-mod-tidy
-
-- repo: local
-  hooks:
-    - id: go-generate
-      name: go generate
-      entry: go generate ./...
-      language: system
-      pass_filenames: false
-      types: [go]

@@ -81,6 +81,6 @@ func (t *Task) LogFields() []any {
 	return []any{
 		"component", "task",
 		"id", t.id,
-		"created_at", t.createdAt,
+		"created_at", t.createdAt.Format(time.RFC3339),
 	}
 }

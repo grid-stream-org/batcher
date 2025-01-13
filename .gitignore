@@ -15,3 +15,9 @@ build
 # Go workspace file
 go.work
 go.work.sum
+
+# Generated files
+gen/
+
+# Output files
+out/

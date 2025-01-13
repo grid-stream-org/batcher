@@ -1,13 +1,13 @@
 package config
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/grid-stream-org/batcher/pkg/bqclient"
 	"github.com/grid-stream-org/batcher/pkg/logger"
+	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
@@ -15,11 +15,12 @@ import (
 )
 
 type Config struct {
-	Batcher     *Batcher       `koanf:"batcher"`
-	Pool        *Pool          `koanf:"pool"`
-	Destination *Destination   `koanf:"destination"`
-	MQTT        *MQTT          `koanf:"mqtt"`
-	Log         *logger.Config `koanf:"log"`
+	Batcher     *Batcher          `koanf:"batcher"`
+	Pool        *Pool             `koanf:"pool"`
+	Destination *Destination      `koanf:"destination"`
+	Validator   *validator.Config `koanf:"validator"`
+	MQTT        *MQTT             `koanf:"mqtt"`
+	Log         *logger.Config    `koanf:"log"`
 }
 
 type Batcher struct {
@@ -88,13 +89,16 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Destination.validate(); err != nil {
-		return errors.Wrap(err, "destination config")
+		return errors.WithStack(err)
 	}
 	if err := c.MQTT.validate(); err != nil {
-		return errors.Wrap(err, "mqtt config")
+		return errors.WithStack(err)
 	}
 	if err := c.Log.Validate(); err != nil {
-		return errors.Wrap(err, "log config")
+		return errors.WithStack(err)
+	}
+	if err := c.Validator.Validate(); err != nil {
+		return errors.WithStack(err)
 	}
 
 	return nil
@@ -118,27 +122,11 @@ func (d *Destination) validate() error {
 		if d.Path == "" {
 			return errors.New("file path required when destination is 'file'")
 		}
-
-		dirPath := filepath.Dir(d.Path)
-		info, err := os.Stat(dirPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return errors.Errorf("directory does not exist: %s", dirPath)
-			}
-			return errors.WithStack(err)
-		}
-
-		if !info.IsDir() {
-			return errors.Errorf("path is not a directory: %s", dirPath)
-		}
 	}
 
 	if d.Type == "database" {
-		if d.Database == nil {
-			return errors.New("database configuration required when type is 'database'")
-		}
-		if d.Database.ProjectID == "" {
-			return errors.New("database project ID required when type is 'database'")
+		if err := d.Database.Validate(); err != nil {
+			return errors.WithStack(err)
 		}
 	}
 

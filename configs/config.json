@@ -7,18 +7,27 @@
     "capacity": 300
   },
   "destination": {
-    "type": "stdout",
-    "path": "./out/batcher.log",
+    "type": "file",
+    "path": "./out/batcher_out.json",
     "buffer": {
-      "start_time": "2025-01-09T19:56:49Z",
+      "start_time": "2025-01-09T19:55:00Z",
       "interval": "5m",
-      "offset": "1s"
+      "offset": "0"
     },
     "database": {
       "project_id": "REDACTED",
       "dataset_id": "REDACTED",
       "creds_path": "REDACTED"
-  }
+    }
+  },
+  "validator": {
+    "host:": "localhost",
+    "port": 3012,
+    "tls": { 
+      "enabled": false,
+      "cert_path": "",
+      "key_path": ""
+    }
   },
   "mqtt": {
     "host": "REDACTED",
@@ -34,7 +43,7 @@
     }
   },
   "log": {
-    "level": "DEBUG",
+    "level": "INFO",
     "format": "json",
     "output": "stdout"
   }

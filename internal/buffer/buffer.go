@@ -8,13 +8,14 @@ import (
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
-	"github.com/grid-stream-org/batcher/pkg/stats"
+	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type FlushOutcome struct {
-	Outcomes   []outcome.Outcome
-	AvgOutputs []outcome.AggregateAverageOutput
+	Outcomes   []outcome.Outcome       `json:"outcomes"`
+	AvgOutputs []outcome.AverageOutput `json:"average_outputs"`
 }
 
 type FlushFunc func(ctx context.Context, data *FlushOutcome) error
@@ -23,22 +24,24 @@ type Buffer struct {
 	cfg       *config.Buffer
 	mu        sync.Mutex
 	data      []outcome.Outcome
-	avgCache  *stats.AvgCache
+	vc        validator.ValidatorClient
+	avgCache  *AvgCache
 	flushFunc FlushFunc
 	log       *slog.Logger
 	cancel    context.CancelFunc
 }
 
-func New(cfg *config.Buffer, flushFunc FlushFunc, log *slog.Logger) *Buffer {
+func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, log *slog.Logger) *Buffer {
 	buf := &Buffer{
 		cfg:       cfg,
 		data:      make([]outcome.Outcome, 0),
+		vc:        vc,
 		flushFunc: flushFunc,
 		log:       log.With("component", "buffer"),
-		avgCache:  stats.NewAvgCache(),
+		avgCache:  NewAvgCache(cfg.StartTime, cfg.StartTime.Add(cfg.Interval)),
 		cancel:    nil,
 	}
-	log.Info("buffer initialized", "start_time", cfg.StartTime, "interval", cfg.Interval, "offset", cfg.Offset)
+	log.Info("buffer initialized", "start_time", cfg.StartTime.Format(time.RFC3339), "interval", cfg.Interval, "offset", cfg.Offset)
 	return buf
 }
 
@@ -97,42 +100,72 @@ func (b *Buffer) Stop() {
 	b.cancel()
 	b.cancel = nil
 	b.mu.Unlock()
-	b.avgCache.Close()
 	b.log.Debug("buffer stopped")
 }
 
 func (b *Buffer) Flush(ctx context.Context) error {
 	b.mu.Lock()
+	totalStart := time.Now()
 	if len(b.data) == 0 {
 		b.mu.Unlock()
-		b.log.Debug("nothing to flush")
+		b.log.Info("nothing to flush")
 		return nil
 	}
 
-	avgOutputs := []outcome.AggregateAverageOutput{}
-	for projID, runningAvg := range b.avgCache.GetAll() {
-		avg := outcome.AggregateAverageOutput{
-			ProjectID:     projID,
-			AverageOutput: runningAvg.Get(),
-			Timestamp:     time.Now(),
-		}
-		avgOutputs = append(avgOutputs, avg)
-	}
-
-	data := &FlushOutcome{
-		Outcomes:   b.data,
-		AvgOutputs: avgOutputs,
-	}
-
-	b.data = nil
-
+	b.log.Debug("starting flush", "data_length", len(b.data))
+	outcomes := b.data
+	b.data = make([]outcome.Outcome, 0, len(b.data))
 	b.mu.Unlock()
 
-	if err := b.flushFunc(ctx, data); err != nil {
-		return errors.WithStack(err)
+	g, ctx := errgroup.WithContext(ctx)
+	var validatorTime time.Duration
+	var flushTime time.Duration
+	var avgOutputs []outcome.AverageOutput
+
+	// g.Go(func() error {
+	// 	validateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// 	defer cancel()
+
+	// 	validatorStart := time.Now()
+	// 	if err := b.vc.SendAverages(validateCtx, b.avgCache.GetProtoOutputs()); err != nil {
+	// 		b.log.Error("failed to send averages", "error", err)
+	// 		return errors.WithStack(err)
+	// 	}
+	// 	validatorTime = time.Since(validatorStart)
+	// 	return nil
+	// })
+
+	g.Go(func() error {
+		flushCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		avgOutputs = b.avgCache.GetOutputs()
+
+		data := &FlushOutcome{
+			Outcomes:   outcomes,
+			AvgOutputs: avgOutputs,
+		}
+
+		flushStart := time.Now()
+		if err := b.flushFunc(flushCtx, data); err != nil {
+			b.log.Error("failed to flush data", "error", err)
+			return errors.WithStack(err)
+		}
+		flushTime = time.Since(flushStart)
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	b.avgCache.Reset()
-	b.log.Debug("buffer flushed", "outcomes", len(data.Outcomes), "average_outputs", len(data.AvgOutputs))
+
+	totalTime := time.Since(totalStart)
+	b.log.Info("buffer flushed", "outcomes", len(outcomes),
+		"average_outputs", len(avgOutputs),
+		"validator_ms", validatorTime.Milliseconds(),
+		"flush_ms", flushTime.Milliseconds(),
+		"total_ms", totalTime.Milliseconds())
 	return nil
 }

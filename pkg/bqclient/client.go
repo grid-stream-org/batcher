@@ -2,7 +2,6 @@ package bqclient
 
 import (
 	"context"
-	"log/slog"
 
 	"cloud.google.com/go/bigquery"
 	"github.com/pkg/errors"
@@ -17,18 +16,17 @@ type BQClient interface {
 }
 
 type Config struct {
-	ProjectID string
-	DatasetID string
-	CredsPath string
+	ProjectID string `koanf:"project_id" json:"project_id" envconfig:"project_id"`
+	DatasetID string `koanf:"dataset_id" json:"dataset_id" envconfig:"dataset_id"`
+	CredsPath string `koanf:"creds_path" json:"creds_path" envconfig:"creds_path"`
 }
 
 type bqClient struct {
 	cfg    *Config
 	client *bigquery.Client
-	log    *slog.Logger
 }
 
-func New(ctx context.Context, cfg *Config, log *slog.Logger) (BQClient, error) {
+func New(ctx context.Context, cfg *Config) (BQClient, error) {
 	bq, err := bigquery.NewClient(ctx, cfg.ProjectID, option.WithCredentialsFile(cfg.CredsPath))
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -37,9 +35,7 @@ func New(ctx context.Context, cfg *Config, log *slog.Logger) (BQClient, error) {
 	c := &bqClient{
 		cfg:    cfg,
 		client: bq,
-		log:    log.With("component", "bigquery", "project", cfg.ProjectID, "dataset", cfg.DatasetID),
 	}
-	c.log.Debug("bigquery client created")
 	return c, nil
 }
 
@@ -48,18 +44,15 @@ func (c *bqClient) Put(ctx context.Context, table string, data any) error {
 		return errors.New("table cannot be empty")
 	}
 
-	c.log.Debug("beginning insert", "table", table)
 	if err := c.Inserter(table).Put(ctx, data); err != nil {
 		return errors.WithStack(err)
 	}
-	c.log.Debug("insert successful", "table", table)
 	return nil
 }
 
 func (c *bqClient) PutAll(ctx context.Context, inputs map[string][]any) error {
 	if len(inputs) == 0 {
-		c.log.Debug("skipping; inputs is empty")
-		return nil
+		return errors.New("inputs cannot be empty")
 	}
 
 	for table, data := range inputs {
@@ -67,11 +60,9 @@ func (c *bqClient) PutAll(ctx context.Context, inputs map[string][]any) error {
 			return errors.New("table cannot be empty")
 		}
 
-		c.log.Debug("processing batch insert", "table", table, "record_count", len(data))
 		if err := c.Inserter(table).Put(ctx, data); err != nil {
 			return errors.WithStack(err)
 		}
-		c.log.Debug("batch insert successful", "table", table, "record_count", len(data))
 	}
 	return nil
 }
@@ -84,10 +75,24 @@ func (c *bqClient) Inserter(table string) *bigquery.Inserter {
 }
 
 func (c *bqClient) Close() error {
-	c.log.Debug("closing bigquery client")
 	if err := c.client.Close(); err != nil {
 		return errors.WithStack(err)
 	}
-	c.log.Debug("bigquery client closed")
+	return nil
+}
+
+func (c *Config) Validate() error {
+	if c == nil {
+		return errors.New("configuration required")
+	}
+	if c.ProjectID == "" {
+		return errors.New("project ID required")
+	}
+	if c.DatasetID == "" {
+		return errors.New("dataset ID required")
+	}
+	if c.CredsPath == "" {
+		return errors.New("creds path ID required")
+	}
 	return nil
 }

@@ -35,7 +35,7 @@ func (o *Outcome) LogFields() []any {
 		"project_id", o.ProjectID,
 		"total_output", o.TotalOutput,
 		"duration_ms", o.DurationMS,
-		"created_at", o.CreatedAt,
+		"created_at", o.CreatedAt.Format(time.RFC3339),
 	}
 	return fields
 }

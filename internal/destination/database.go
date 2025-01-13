@@ -8,6 +8,7 @@ import (
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/pkg/bqclient"
+	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/pkg/errors"
 )
 
@@ -17,8 +18,8 @@ type databaseDestination struct {
 	log    *slog.Logger
 }
 
-func newDatabaseDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
-	client, err := bqclient.New(ctx, cfg.Database, log)
+func newDatabaseDestination(ctx context.Context, cfg *config.Destination, vc validator.ValidatorClient, log *slog.Logger) (Destination, error) {
+	client, err := bqclient.New(ctx, cfg.Database)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -28,7 +29,7 @@ func newDatabaseDestination(ctx context.Context, cfg *config.Destination, log *s
 		log:    log.With("component", "database_destination"),
 	}
 
-	d.buf = buffer.New(cfg.Buffer, d.flushFunc, log)
+	d.buf = buffer.New(cfg.Buffer, d.flushFunc, vc, log)
 	return d, errors.WithStack(err)
 }
 

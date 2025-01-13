@@ -102,7 +102,7 @@ func (tp *TaskPool) worker(ctx context.Context, workerId int) {
 				log.Error("failed to add outcome to destination", "error", err)
 				continue
 			}
-			log.Debug("task completed successfully")
+			log.With("outcome", outcome.LogFields()).Debug("task completed successfully")
 		case <-ctx.Done():
 			log.Debug("context cancelled, stopping worker", "reason", ctx.Err())
 			return
