@@ -189,7 +189,8 @@ func (s *FileDestinationTestSuite) TestFlushFunc() {
 	s.NoError(err)
 
 	// Verify file contents
-	s.dest.file.Sync()
+	err = s.dest.file.Sync()
+	s.NoError(err)
 
 	contents, err := os.ReadFile(s.filePath)
 	s.NoError(err)
