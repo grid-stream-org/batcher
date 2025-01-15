@@ -22,10 +22,10 @@ download: ## Download project dependencies
 	$(GOMOD) download
 
 build: ## Build the binary
-	$(GOBUILD) $(LDFLAGS) -o build/$(BINARY) ./cmd/batcher
+	$(GOBUILD) $(LDFLAGS) -o build/$(BINARY) ./cmd/$(BINARY)
 
 test: ## Run tests
-	$(GOTEST) -v ./...
+	$(GOTEST) ./...
 
 clean: ## Clean build files
 	$(RM) build

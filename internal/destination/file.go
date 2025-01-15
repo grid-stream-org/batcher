@@ -27,7 +27,7 @@ func newFileDestination(ctx context.Context, cfg *config.Destination, vc validat
 		return nil, errors.WithStack(err)
 	}
 
-	file, err := os.OpenFile(cfg.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(cfg.Path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -44,12 +44,12 @@ func newFileDestination(ctx context.Context, cfg *config.Destination, vc validat
 	return d, nil
 }
 
-func (d *fileDestination) Add(data any) error {
+func (d *fileDestination) Add(ctx context.Context, data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
 		return errors.Errorf("expected *outcome.Outcome, got %T", data)
 	}
-	d.buf.Add(outcome)
+	d.buf.Add(ctx, outcome)
 	return nil
 }
 

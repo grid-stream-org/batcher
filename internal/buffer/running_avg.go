@@ -3,20 +3,20 @@ package buffer
 import (
 	"time"
 
-	"github.com/grid-stream-org/batcher/internal/outcome"
+	"github.com/grid-stream-org/batcher/internal/types"
 )
 
 type RunningAvg struct {
 	sum     float64
 	count   int64
-	average *outcome.AverageOutput
+	average *types.AverageOutput
 }
 
 func NewRunningAvg(projectID string, startTime time.Time, endTime time.Time) *RunningAvg {
 	return &RunningAvg{
 		sum:   0,
 		count: 0,
-		average: &outcome.AverageOutput{
+		average: &types.AverageOutput{
 			ProjectID: projectID,
 			StartTime: startTime,
 			EndTime:   endTime,

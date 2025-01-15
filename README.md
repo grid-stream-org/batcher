@@ -44,10 +44,7 @@ git clone https://github.com/grid-stream-org/batcher.git
 ```bash
 cd batcher
 ```
-3. Create a local `.env` file, and ensure it is populated with the correct credentials
-```bash
-cp .env.example .env
-```
+3. Populate `configs/config.json` with valid config to run the batcher
 4. Install the project dependencies
 ```bash
 make download

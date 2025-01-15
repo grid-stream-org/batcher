@@ -59,7 +59,6 @@ func (tp *TaskPool) submitTask(t Task) {
 	if tp.dedup.Add(t.id, struct{}{}, 5*time.Minute) != nil {
 		log.Warn("skipping duplicate task")
 		return
-
 	}
 	log.Debug("submitting task")
 	tp.tasks <- t
@@ -98,7 +97,7 @@ func (tp *TaskPool) worker(ctx context.Context, workerId int) {
 				}
 				continue
 			}
-			if err := tp.destination.Add(outcome); err != nil {
+			if err := tp.destination.Add(ctx, outcome); err != nil {
 				log.Error("failed to add outcome to destination", "error", err)
 				continue
 			}

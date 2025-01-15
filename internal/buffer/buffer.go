@@ -8,14 +8,15 @@ import (
 
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
+	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
 type FlushOutcome struct {
-	Outcomes   []outcome.Outcome       `json:"outcomes"`
-	AvgOutputs []outcome.AverageOutput `json:"average_outputs"`
+	Outcomes   []outcome.Outcome     `json:"outcomes"`
+	AvgOutputs []types.AverageOutput `json:"average_outputs"`
 }
 
 type FlushFunc func(ctx context.Context, data *FlushOutcome) error
@@ -45,11 +46,15 @@ func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, 
 	return buf
 }
 
-func (b *Buffer) Add(data *outcome.Outcome) {
+func (b *Buffer) Add(ctx context.Context, data *outcome.Outcome) {
 	b.mu.Lock()
 	b.data = append(b.data, *data)
 	b.mu.Unlock()
-	b.avgCache.Add(data.ProjectID, data.TotalOutput)
+	if exists := b.avgCache.Add(data.ProjectID, data.TotalOutput); !exists {
+		if err := b.vc.NotifyProject(ctx, data.ProjectID); err != nil {
+			b.log.Error("failed to notify validator of new project", "project_id", data.ProjectID, "error", err)
+		}
+	}
 	b.log.Debug("record added to buffer", "buffer_size", len(b.data))
 }
 
@@ -120,7 +125,7 @@ func (b *Buffer) Flush(ctx context.Context) error {
 	g, ctx := errgroup.WithContext(ctx)
 	var validatorTime time.Duration
 	var flushTime time.Duration
-	var avgOutputs []outcome.AverageOutput
+	var avgOutputs []types.AverageOutput
 
 	// g.Go(func() error {
 	// 	validateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)

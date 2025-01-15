@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/outcome"
+	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +33,7 @@ func NewTask(payload []byte) Task {
 
 func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 	start := time.Now()
-	var ders []outcome.DER
+	var ders []types.DER
 
 	if err := json.Unmarshal(t.payload, &ders); err != nil {
 		return nil, errors.Wrap(err, "failed to parse message payload")
@@ -42,7 +43,7 @@ func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 		return nil, ErrNoDERs
 	}
 
-	data := []outcome.RealTimeDERData{}
+	data := []types.RealTimeDERData{}
 	var totalOutput float64 = 0
 	var projID = ders[0].ProjectID
 	for _, der := range ders {
@@ -52,7 +53,7 @@ func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 		}
 
 		totalOutput += der.CurrentOutput
-		derData := outcome.RealTimeDERData{
+		derData := types.RealTimeDERData{
 			ID:                uuid.New().String(),
 			DerID:             der.DerID,
 			DeviceID:          der.DeviceID,

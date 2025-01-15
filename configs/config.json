@@ -42,7 +42,7 @@
     }
   },
   "log": {
-    "level": "INFO",
+    "level": "DEBUG",
     "format": "json",
     "output": "stdout"
   }

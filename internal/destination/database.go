@@ -33,12 +33,12 @@ func newDatabaseDestination(ctx context.Context, cfg *config.Destination, vc val
 	return d, errors.WithStack(err)
 }
 
-func (d *databaseDestination) Add(data any) error {
+func (d *databaseDestination) Add(ctx context.Context, data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
 		return errors.Errorf("expected *outcome.Outcome, got %T", data)
 	}
-	d.buf.Add(outcome)
+	d.buf.Add(ctx, outcome)
 	return nil
 }
 

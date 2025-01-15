@@ -15,6 +15,7 @@ import (
 
 type ValidatorClient interface {
 	SendAverages(ctx context.Context, averages []*pb.AverageOutput) error
+	NotifyProject(ctx context.Context, projectID string) error
 	Close() error
 }
 
@@ -34,6 +35,23 @@ type validatorClient struct {
 	cfg    *Config
 	client pb.ValidatorServiceClient
 	conn   *grpc.ClientConn
+}
+
+func (c *Config) Validate() error {
+	if c.Port <= 0 {
+		return errors.New("port must be greater than 0")
+	}
+
+	if c.TLSConfig != nil && c.TLSConfig.Enabled {
+		if c.TLSConfig.CertPath == "" {
+			return errors.New("cert_path required when tls is enabled")
+		}
+		if c.TLSConfig.KeyPath == "" {
+			return errors.New("key_path required when tls is enabled")
+		}
+	}
+
+	return nil
 }
 
 func New(ctx context.Context, cfg *Config) (ValidatorClient, error) {
@@ -73,33 +91,34 @@ func (c *validatorClient) Close() error {
 	return c.conn.Close()
 }
 
-func (c *validatorClient) SendAverages(ctx context.Context, averages []*pb.AverageOutput) error {
+func (c *validatorClient) SendAverages(ctx context.Context, averageOutputs []*pb.AverageOutput) error {
 	req := &pb.ValidateAverageOutputsRequest{
-		Averages: averages,
+		AverageOutputs: averageOutputs,
 	}
+
 	res, err := c.client.ValidateAverageOutputs(ctx, req)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if !res.Success && res.Errors != nil && len(res.Errors) > 0 {
-		return errors.Errorf("validation failed: %s", res.Message)
+
+	if !res.Success && len(res.Errors) > 0 {
+		return &ValidationErrors{Errors: res.Errors}
 	}
 	return nil
 }
 
-func (c *Config) Validate() error {
-	if c.Port <= 0 {
-		return errors.New("port must be greater than 0")
+func (c *validatorClient) NotifyProject(ctx context.Context, projectID string) error {
+	req := &pb.NotifyProjectRequest{
+		ProjectId: projectID,
 	}
 
-	if c.TLSConfig != nil && c.TLSConfig.Enabled {
-		if c.TLSConfig.CertPath == "" {
-			return errors.New("cert_path required when tls is enabled")
-		}
-		if c.TLSConfig.KeyPath == "" {
-			return errors.New("key_path required when tls is enabled")
-		}
+	res, err := c.client.NotifyProject(ctx, req)
+	if err != nil {
+		return errors.WithStack(err)
 	}
 
+	if !res.Acknowledged && len(res.Errors) > 0 {
+		return &NotifyProjectErrors{Errors: res.Errors}
+	}
 	return nil
 }

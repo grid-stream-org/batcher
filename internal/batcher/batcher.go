@@ -24,11 +24,7 @@ type Batcher struct {
 	log  *slog.Logger
 }
 
-func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Batcher, error) {
-	vc, err := validator.New(ctx, cfg.Validator)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+func New(ctx context.Context, cfg *config.Config, vc validator.ValidatorClient, log *slog.Logger) (*Batcher, error) {
 	log.Info("validator client created successfully")
 
 	dest, err := destination.NewDestination(ctx, cfg.Destination, vc, log)

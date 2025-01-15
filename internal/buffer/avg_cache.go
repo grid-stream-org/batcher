@@ -6,7 +6,7 @@ import (
 
 	pb "github.com/grid-stream-org/grid-stream-protos/gen/validator/v1"
 
-	"github.com/grid-stream-org/batcher/internal/outcome"
+	"github.com/grid-stream-org/batcher/internal/types"
 )
 
 type AvgCache struct {
@@ -24,22 +24,24 @@ func NewAvgCache(startTime time.Time, endTime time.Time) *AvgCache {
 	}
 }
 
-func (ac *AvgCache) Add(k string, v float64) {
+func (ac *AvgCache) Add(k string, v float64) bool {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
-	ra, ok := ac.items[k]
-	if !ok {
+
+	ra, exists := ac.items[k]
+	if !exists {
 		ra = NewRunningAvg(k, ac.startTime, ac.endTime)
 		ac.items[k] = ra
 	}
 	ra.Add(v)
+	return exists
 }
 
-func (ac *AvgCache) GetOutputs() []outcome.AverageOutput {
+func (ac *AvgCache) GetOutputs() []types.AverageOutput {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 
-	outputs := make([]outcome.AverageOutput, 0, len(ac.items))
+	outputs := make([]types.AverageOutput, 0, len(ac.items))
 	for _, ra := range ac.items {
 		outputs = append(outputs, *ra.average)
 	}
