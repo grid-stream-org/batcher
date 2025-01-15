@@ -17,7 +17,7 @@ require (
 	go.uber.org/multierr v1.11.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/api v0.211.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.69.4
 )
 
 require (
