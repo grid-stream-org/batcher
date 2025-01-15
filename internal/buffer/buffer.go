@@ -127,18 +127,18 @@ func (b *Buffer) Flush(ctx context.Context) error {
 	var flushTime time.Duration
 	var avgOutputs []types.AverageOutput
 
-	// g.Go(func() error {
-	// 	validateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	// 	defer cancel()
+	g.Go(func() error {
+		validateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
 
-	// 	validatorStart := time.Now()
-	// 	if err := b.vc.SendAverages(validateCtx, b.avgCache.GetProtoOutputs()); err != nil {
-	// 		b.log.Error("failed to send averages", "error", err)
-	// 		return errors.WithStack(err)
-	// 	}
-	// 	validatorTime = time.Since(validatorStart)
-	// 	return nil
-	// })
+		validatorStart := time.Now()
+		if err := b.vc.SendAverages(validateCtx, b.avgCache.GetProtoOutputs()); err != nil {
+			b.log.Error("failed to send averages", "error", err)
+			return errors.WithStack(err)
+		}
+		validatorTime = time.Since(validatorStart)
+		return nil
+	})
 
 	g.Go(func() error {
 		flushCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
