@@ -30,10 +30,10 @@
     }
   },
   "mqtt": {
-    "host": "REDACTED",
+    "host": "2fc0554ad38e4185a74476dae4f0a22f.s1.eu.hivemq.cloud",
     "port": 8883,
-    "username": "REDACTED",
-    "password": "REDACTED",
+    "username": "gridstream",
+    "password": "3^@kfZFyu$&&AU@&d@z2t9@$#",
     "qos": 2,
     "tls": {
       "enabled": false,
