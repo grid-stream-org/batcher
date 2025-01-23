@@ -15,9 +15,9 @@
       "offset": "10s"
     },
     "database": {
-      "project_id": "grid-stream",
-      "dataset_id": "grid-stream.gridstream_operations",
-      "creds_path": "/Users/mjc/code/grid-stream-e1363b2bd829.json"
+      "project_id": "REDACTED",
+      "dataset_id": "REDACTED",
+      "creds_path": "REDACTED"
     }
   },
   "validator": {
@@ -25,10 +25,10 @@
     "port": 3012
   },
   "mqtt": {
-    "host": "2fc0554ad38e4185a74476dae4f0a22f.s1.eu.hivemq.cloud",
+    "host": "REDACTED",
     "port": 8883,
-    "username": "gridstream",
-    "password": "3^@kfZFyu$&&AU@&d@z2t9@$#",
+    "username": "REDACTED",
+    "password": "REDACTED",
     "qos": 2
   },
   "log": {

@@ -183,7 +183,7 @@ func (c *bqClient) Get(ctx context.Context, table string, id string, dst any) er
 	return c.QueryRow(ctx, query, params, dst)
 }
 
-func (c *bqClient) Update(ctx context.Context, table string, id string, updates map[string]interface{}) error {
+func (c *bqClient) Update(ctx context.Context, table string, id string, updates map[string]any) error {
 	if err := validateTableName(table); err != nil {
 		return err
 	}

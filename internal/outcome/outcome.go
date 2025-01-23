@@ -19,11 +19,16 @@ type Outcome struct {
 }
 
 func New(workerID int, taskID string, projectID string, data []types.RealTimeDERData, netOutput float64, duration time.Duration) *Outcome {
+	var contractThreshold float64
+	if len(data) > 0 {
+		contractThreshold = data[0].ContractThreshold
+	}
+
 	return &Outcome{
-		Success:           data != nil,
+		Success:           len(data) > 0,
 		WorkerID:          workerID,
 		TaskID:            taskID,
-		ContractThreshold: data[0].ContractThreshold,
+		ContractThreshold: contractThreshold,
 		ProjectID:         projectID,
 		NetOutput:         netOutput,
 		DurationMS:        duration.Milliseconds(),

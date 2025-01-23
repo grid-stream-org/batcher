@@ -12,6 +12,7 @@ type DER struct {
 	CurrentSoc            float64      `bigquery:"current_soc" json:"current_soc"`
 	ContractThreshold     float64      `bigquery:"contract_threshold" json:"contract_threshold"`
 	PowerMeterMeasurement float64      `bigquery:"power_meter_measurement" json:"power_meter_measurement"`
+	Baseline              float64      `bigquery:"baseline" json:"baseline"`
 	Units                 string       `bigquery:"units" json:"units"`
 	Timestamp             NillableTime `bigquery:"timestamp" json:"timestamp"`
 }
