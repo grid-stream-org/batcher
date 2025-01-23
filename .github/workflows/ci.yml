@@ -81,3 +81,9 @@ jobs:
           name: batcher-${{ runner.os }}
           path: build/batcher*
           retention-days: 7
+      
+      - name: Create tag
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
