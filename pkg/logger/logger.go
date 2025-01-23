@@ -11,9 +11,9 @@ import (
 )
 
 type Config struct {
-	Level  string `json:"level"`
-	Format string `json:"format"`
-	Output string `json:"output"`
+	Level  string `envconfig:"level" json:"level"`
+	Format string `envconfig:"format" json:"format"`
+	Output string `envconfig:"output" json:"output"`
 }
 
 var (
