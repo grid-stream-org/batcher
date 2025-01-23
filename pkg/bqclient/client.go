@@ -56,6 +56,7 @@ var (
 	validIdentifierRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 	errInvalidTable      = errors.New("invalid table name")
 	errInvalidColumn     = errors.New("invalid column identifier")
+	ErrNotFound          = errors.New("no rows returned")
 )
 
 func validateTableName(table string) error {
@@ -154,7 +155,7 @@ func (c *bqClient) QueryRow(ctx context.Context, query string, params []bigquery
 
 	if err := it.Next(dst); err != nil {
 		if err == iterator.Done {
-			return errors.New("no rows returned")
+			return ErrNotFound
 		}
 		return errors.WithStack(err)
 	}

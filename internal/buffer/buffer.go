@@ -152,7 +152,7 @@ func (b *Buffer) Flush(parentCtx context.Context) error {
 	})
 
 	if err := g.Wait(); err != nil {
-		return err
+		return errors.WithStack(err)
 	}
 
 	b.avgCache.Reset()
