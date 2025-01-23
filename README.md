@@ -24,7 +24,21 @@
 | Sam Keays       | Product Owner/Developer   | Manager of product backlog and updating board to reflect scope changes and requirements, focus on database operations and schema design.                |
 
 ## 🏗️ Directory Structure
-TODO
+
+- `.github/`
+  - GitHub CI/CD workflows
+- `assets/`
+  - Static assets
+- `cmd/`
+  - Main application
+- `configs/`
+  - Configuration file template
+- `internal/`
+  - Private application and library code
+- `metrics/`
+  - Global Prometheus metrics instance
+- `pkg/`
+  - Public application and library code
 
 ## ⛑️ Contributing
 

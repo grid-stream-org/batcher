@@ -39,11 +39,6 @@ func (s *ConfigTestSuite) newValidConfig() *Config {
 			Username: "user",
 			Password: "pass",
 			QoS:      1,
-			TLSConfig: &TLSConfig{
-				Enabled:  false,
-				CertPath: "",
-				KeyPath:  "",
-			},
 		},
 		Log: &logger.Config{
 			Level:  "INFO",
@@ -275,26 +270,6 @@ func (s *ConfigTestSuite) TestMQTTValidation() {
 			expectError: true,
 			errorMsg:    "qos must be between 0 and 2",
 		},
-		{
-			name: "TLS enabled without cert path",
-			modify: func(m *MQTT) {
-				m.TLSConfig.Enabled = true
-				m.TLSConfig.CertPath = ""
-				m.TLSConfig.KeyPath = "key.pem"
-			},
-			expectError: true,
-			errorMsg:    "cert_path required when tls is enabled",
-		},
-		{
-			name: "TLS enabled without key path",
-			modify: func(m *MQTT) {
-				m.TLSConfig.Enabled = true
-				m.TLSConfig.CertPath = "cert.pem"
-				m.TLSConfig.KeyPath = ""
-			},
-			expectError: true,
-			errorMsg:    "key_path required when tls is enabled",
-		},
 	}
 
 	for _, tc := range testCases {
@@ -305,11 +280,6 @@ func (s *ConfigTestSuite) TestMQTTValidation() {
 				Username: "user",
 				Password: "pass",
 				QoS:      1,
-				TLSConfig: &TLSConfig{
-					Enabled:  false,
-					CertPath: "",
-					KeyPath:  "",
-				},
 			}
 			tc.modify(mqtt)
 			err := mqtt.validate()

@@ -51,7 +51,7 @@ func run() (err error) {
 	go metricsListenAndServe(log)
 
 	// Create validator client
-	validatorClient, err := validator.New(ctx, cfg.Validator)
+	validatorClient, err := validator.New(ctx, cfg.Validator, log)
 	if err != nil {
 		return err
 	}

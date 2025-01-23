@@ -28,7 +28,7 @@ func (s *OutcomeTestSuite) TestNew() {
 			taskID:    "task1",
 			projectID: "project1",
 			data: []types.RealTimeDERData{
-				{ID: "1", DerID: "der1"},
+				{ID: "1", DER: types.DER{DerID: "der1"}},
 			},
 			totalOutput: 100.5,
 			duration:    500 * time.Millisecond,
@@ -55,7 +55,7 @@ func (s *OutcomeTestSuite) TestNew() {
 			s.Equal(tc.taskID, outcome.TaskID)
 			s.Equal(tc.projectID, outcome.ProjectID)
 			s.Equal(tc.data, outcome.Data)
-			s.Equal(tc.totalOutput, outcome.TotalOutput)
+			s.Equal(tc.totalOutput, outcome.NetOutput)
 			s.Equal(tc.duration.Milliseconds(), outcome.DurationMS)
 
 			// CreatedAt should be between before and after

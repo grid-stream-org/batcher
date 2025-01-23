@@ -50,11 +50,7 @@ func (b *Buffer) Add(ctx context.Context, data *outcome.Outcome) {
 	b.mu.Lock()
 	b.data = append(b.data, *data)
 	b.mu.Unlock()
-	if exists := b.avgCache.Add(data.ProjectID, data.TotalOutput); !exists {
-		if err := b.vc.NotifyProject(ctx, data.ProjectID); err != nil {
-			b.log.Error("failed to notify validator of new project", "project_id", data.ProjectID, "error", err)
-		}
-	}
+	b.avgCache.Add(data)
 	b.log.Debug("record added to buffer", "buffer_size", len(b.data))
 }
 
@@ -97,18 +93,19 @@ func (b *Buffer) autoFlush(ctx context.Context) {
 
 func (b *Buffer) Stop() {
 	b.mu.Lock()
-	if b.cancel == nil {
-		b.mu.Unlock()
-		b.log.Warn("buffer not running or already stopped")
-		return
+	defer b.mu.Unlock()
+
+	if b.cancel != nil {
+		b.cancel()
+		b.cancel = nil
+		b.log.Debug("buffer stopped")
 	}
-	b.cancel()
-	b.cancel = nil
-	b.mu.Unlock()
-	b.log.Debug("buffer stopped")
 }
 
-func (b *Buffer) Flush(ctx context.Context) error {
+func (b *Buffer) Flush(parentCtx context.Context) error {
+	timeoutCtx, timeoutCancel := context.WithTimeout(parentCtx, b.cfg.Offset)
+	defer timeoutCancel()
+
 	b.mu.Lock()
 	totalStart := time.Now()
 	if len(b.data) == 0 {
@@ -122,18 +119,15 @@ func (b *Buffer) Flush(ctx context.Context) error {
 	b.data = make([]outcome.Outcome, 0, len(b.data))
 	b.mu.Unlock()
 
-	g, ctx := errgroup.WithContext(ctx)
+	g, ctx := errgroup.WithContext(timeoutCtx)
 	var validatorTime time.Duration
 	var flushTime time.Duration
 	var avgOutputs []types.AverageOutput
 
 	g.Go(func() error {
-		validateCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-
 		validatorStart := time.Now()
-		if err := b.vc.SendAverages(validateCtx, b.avgCache.GetProtoOutputs()); err != nil {
-			b.log.Error("failed to send averages", "error", err)
+		if err := b.vc.SendAverages(ctx, b.avgCache.GetProtoOutputs()); err != nil {
+			b.log.Error("failed to send averages to validator", "error", err)
 			return errors.WithStack(err)
 		}
 		validatorTime = time.Since(validatorStart)
@@ -141,9 +135,6 @@ func (b *Buffer) Flush(ctx context.Context) error {
 	})
 
 	g.Go(func() error {
-		flushCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-
 		avgOutputs = b.avgCache.GetOutputs()
 
 		data := &FlushOutcome{
@@ -152,8 +143,8 @@ func (b *Buffer) Flush(ctx context.Context) error {
 		}
 
 		flushStart := time.Now()
-		if err := b.flushFunc(flushCtx, data); err != nil {
-			b.log.Error("failed to flush data", "error", err)
+		if err := b.flushFunc(ctx, data); err != nil {
+			b.log.Error("failed to flush data to destination", "error", err)
 			return errors.WithStack(err)
 		}
 		flushTime = time.Since(flushStart)

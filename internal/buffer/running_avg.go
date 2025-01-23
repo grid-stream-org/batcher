@@ -3,6 +3,7 @@ package buffer
 import (
 	"time"
 
+	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/internal/types"
 )
 
@@ -12,14 +13,15 @@ type RunningAvg struct {
 	average *types.AverageOutput
 }
 
-func NewRunningAvg(projectID string, startTime time.Time, endTime time.Time) *RunningAvg {
+func NewRunningAvg(o *outcome.Outcome, startTime time.Time, endTime time.Time) *RunningAvg {
 	return &RunningAvg{
 		sum:   0,
 		count: 0,
 		average: &types.AverageOutput{
-			ProjectID: projectID,
-			StartTime: startTime,
-			EndTime:   endTime,
+			ProjectID:         o.ProjectID,
+			StartTime:         startTime,
+			ContractThreshold: o.ContractThreshold,
+			EndTime:           endTime,
 		},
 	}
 }

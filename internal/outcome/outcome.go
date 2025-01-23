@@ -7,26 +7,28 @@ import (
 )
 
 type Outcome struct {
-	Success     bool                    `json:"success"`
-	WorkerID    int                     `json:"worker_id"`
-	TaskID      string                  `json:"task_id"`
-	Data        []types.RealTimeDERData `json:"data"`
-	ProjectID   string                  `json:"project_id"`
-	TotalOutput float64                 `json:"total_der_output"`
-	DurationMS  int64                   `json:"duration_ms"`
-	CreatedAt   time.Time               `json:"created_at"`
+	Success           bool                    `json:"success"`
+	WorkerID          int                     `json:"worker_id"`
+	TaskID            string                  `json:"task_id"`
+	ProjectID         string                  `json:"project_id"`
+	ContractThreshold float64                 `json:"contract_threshold"`
+	NetOutput         float64                 `json:"net_output"`
+	DurationMS        int64                   `json:"duration_ms"`
+	CreatedAt         time.Time               `json:"created_at"`
+	Data              []types.RealTimeDERData `json:"data"`
 }
 
-func New(workerID int, taskID string, projectID string, data []types.RealTimeDERData, totalOutput float64, duration time.Duration) Outcome {
-	return Outcome{
-		Success:     data != nil,
-		WorkerID:    workerID,
-		TaskID:      taskID,
-		Data:        data,
-		ProjectID:   projectID,
-		TotalOutput: totalOutput,
-		DurationMS:  duration.Milliseconds(),
-		CreatedAt:   time.Now(),
+func New(workerID int, taskID string, projectID string, data []types.RealTimeDERData, netOutput float64, duration time.Duration) *Outcome {
+	return &Outcome{
+		Success:           data != nil,
+		WorkerID:          workerID,
+		TaskID:            taskID,
+		ContractThreshold: data[0].ContractThreshold,
+		ProjectID:         projectID,
+		NetOutput:         netOutput,
+		DurationMS:        duration.Milliseconds(),
+		CreatedAt:         time.Now(),
+		Data:              data,
 	}
 }
 
@@ -37,7 +39,7 @@ func (o *Outcome) LogFields() []any {
 		"worker_id", o.WorkerID,
 		"task_id", o.TaskID,
 		"project_id", o.ProjectID,
-		"total_output", o.TotalOutput,
+		"net_output", o.NetOutput,
 		"duration_ms", o.DurationMS,
 		"created_at", o.CreatedAt.Format(time.RFC3339),
 	}

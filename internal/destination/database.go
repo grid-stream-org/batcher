@@ -7,6 +7,7 @@ import (
 	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
+	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/grid-stream-org/batcher/pkg/bqclient"
 	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/pkg/errors"
@@ -28,9 +29,11 @@ func newDatabaseDestination(ctx context.Context, cfg *config.Destination, vc val
 		client: client,
 		log:    log.With("component", "database_destination"),
 	}
+	d.log.Info("bigquery client initialized", "project_id", cfg.Database.ProjectID, "dataset_id", cfg.Database.DatasetID)
 
 	d.buf = buffer.New(cfg.Buffer, d.flushFunc, vc, log)
-	return d, errors.WithStack(err)
+	d.buf.Start(ctx)
+	return d, nil
 }
 
 func (d *databaseDestination) Add(ctx context.Context, data any) error {
@@ -53,6 +56,44 @@ func (d *databaseDestination) Close() error {
 }
 
 func (d *databaseDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
+	if len(data.Outcomes) == 0 {
+		d.log.Debug("no outcomes to flush")
+		return nil
+	}
 
+	derCount := 0
+	for _, outcome := range data.Outcomes {
+		derCount += len(outcome.Data)
+	}
+
+	if derCount == 0 {
+		d.log.Debug("no DER data to flush")
+		return nil
+	}
+
+	derData := make([]types.RealTimeDERData, derCount)
+	for _, outcome := range data.Outcomes {
+		derData = append(derData, outcome.Data...)
+	}
+
+	input := map[string][]any{
+		"der_data":         make([]any, len(derData)),
+		"project_averages": make([]any, len(data.AvgOutputs)),
+	}
+
+	d.log.Debug("preparing data for flush", "der_data_count", len(derData), "avg_outputs_count", len(data.AvgOutputs))
+
+	for i := range derData {
+		input["der_data"][i] = derData[i]
+	}
+	for i := range data.AvgOutputs {
+		input["project_averages"][i] = data.AvgOutputs[i]
+	}
+
+	if err := d.client.PutAll(ctx, input); err != nil {
+		return errors.Wrap(err, "failed to write data to BigQuery")
+	}
+
+	d.log.Debug("successfully flushed data to BigQuery", "der_records", len(derData), "avg_records", len(data.AvgOutputs))
 	return nil
 }

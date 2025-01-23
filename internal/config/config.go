@@ -46,18 +46,11 @@ type Buffer struct {
 }
 
 type MQTT struct {
-	Host      string     `koanf:"host"`
-	Port      int        `koanf:"port"`
-	Username  string     `koanf:"username"`
-	Password  string     `koanf:"password"`
-	QoS       int        `koanf:"qos"`
-	TLSConfig *TLSConfig `koanf:"tls"`
-}
-
-type TLSConfig struct {
-	Enabled  bool   `koanf:"enabled"`
-	CertPath string `koanf:"cert_path"`
-	KeyPath  string `koanf:"key_path"`
+	Host     string `koanf:"host"`
+	Port     int    `koanf:"port"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
+	QoS      int    `koanf:"qos"`
 }
 
 func Load() (*Config, error) {
@@ -154,14 +147,6 @@ func (m *MQTT) validate() error {
 	}
 	if m.QoS < 0 || m.QoS > 2 {
 		return errors.New("qos must be between 0 and 2")
-	}
-	if m.TLSConfig.Enabled {
-		if m.TLSConfig.CertPath == "" {
-			return errors.New("cert_path required when tls is enabled")
-		}
-		if m.TLSConfig.KeyPath == "" {
-			return errors.New("key_path required when tls is enabled")
-		}
 	}
 	return nil
 }

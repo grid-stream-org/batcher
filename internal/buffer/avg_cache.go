@@ -6,8 +6,11 @@ import (
 
 	pb "github.com/grid-stream-org/grid-stream-protos/gen/validator/v1"
 
+	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/internal/types"
 )
+
+// TODO fix these tests
 
 type AvgCache struct {
 	mu        sync.Mutex
@@ -24,17 +27,16 @@ func NewAvgCache(startTime time.Time, endTime time.Time) *AvgCache {
 	}
 }
 
-func (ac *AvgCache) Add(k string, v float64) bool {
+func (ac *AvgCache) Add(o *outcome.Outcome) {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 
-	ra, exists := ac.items[k]
-	if !exists {
-		ra = NewRunningAvg(k, ac.startTime, ac.endTime)
-		ac.items[k] = ra
+	ra, ok := ac.items[o.ProjectID]
+	if !ok {
+		ra = NewRunningAvg(o, ac.startTime, ac.endTime)
+		ac.items[o.ProjectID] = ra
 	}
-	ra.Add(v)
-	return exists
+	ra.Add(o.NetOutput)
 }
 
 func (ac *AvgCache) GetOutputs() []types.AverageOutput {
@@ -55,10 +57,11 @@ func (ac *AvgCache) GetProtoOutputs() []*pb.AverageOutput {
 	outputs := make([]*pb.AverageOutput, 0, len(ac.items))
 	for _, ra := range ac.items {
 		avg := &pb.AverageOutput{
-			ProjectId:     ra.average.ProjectID,
-			AverageOutput: ra.average.AverageOutput,
-			StartTime:     ra.average.StartTime.Format(time.RFC3339),
-			EndTime:       ra.average.EndTime.Format(time.RFC3339),
+			ProjectId:         ra.average.ProjectID,
+			AverageOutput:     ra.average.AverageOutput,
+			ContractThreshold: ra.average.ContractThreshold,
+			StartTime:         ra.average.StartTime.Format(time.RFC3339),
+			EndTime:           ra.average.EndTime.Format(time.RFC3339),
 		}
 		outputs = append(outputs, avg)
 	}

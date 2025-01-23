@@ -6,15 +6,13 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/pkg/errors"
 )
 
 var (
-	ErrNoDERs            = errors.New("received empty DER array")
-	ErrVariousProjectIDs = errors.New("invalid payload; various project ids")
+	ErrNoDERs = errors.New("received empty DER array")
 )
 
 type Task struct {
@@ -44,33 +42,18 @@ func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 	}
 
 	data := []types.RealTimeDERData{}
-	var totalOutput float64 = 0
-	var projID = ders[0].ProjectID
+	var netOutput float64 = ders[0].PowerMeterMeasurement
 	for _, der := range ders {
-		// Validation, we shouldnt ever get a payload of DERS from various project IDs
-		if der.ProjectID != projID {
-			return nil, ErrVariousProjectIDs
-		}
-
-		totalOutput += der.CurrentOutput
+		netOutput -= der.CurrentOutput
 		derData := types.RealTimeDERData{
-			ID:                uuid.New().String(),
-			DerID:             der.DerID,
-			DeviceID:          der.DeviceID,
-			Timestamp:         der.Timestamp,
-			CurrentOutput:     der.CurrentOutput,
-			Units:             der.Units,
-			ProjectID:         der.ProjectID,
-			IsOnline:          der.IsOnline,
-			IsStandalone:      der.IsStandalone,
-			ConnectionStartAt: der.ConnectionStartAt,
-			CurrentSoc:        der.CurrentSoc,
+			ID:  t.id,
+			DER: der,
 		}
 		data = append(data, derData)
 	}
 
-	o := outcome.New(workerId, t.id, projID, data, totalOutput, time.Since(start))
-	return &o, nil
+	o := outcome.New(workerId, t.id, ders[0].ProjectID, data, netOutput, time.Since(start))
+	return o, nil
 }
 
 func makeID(payload []byte) string {

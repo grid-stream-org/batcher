@@ -2,33 +2,24 @@ package validator
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"path/filepath"
+	"log/slog"
+	"strings"
 
 	pb "github.com/grid-stream-org/grid-stream-protos/gen/validator/v1"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 type ValidatorClient interface {
 	SendAverages(ctx context.Context, averages []*pb.AverageOutput) error
-	NotifyProject(ctx context.Context, projectID string) error
 	Close() error
 }
 
 type Config struct {
-	Host      string     `koanf:"host" json:"host" envconfig:"host"`
-	Port      int        `koanf:"port" json:"port" envconfig:"port"`
-	TLSConfig *TLSConfig `koanf:"tls_config" json:"tls_config" envconfig:"tls_config"`
-}
-
-type TLSConfig struct {
-	Enabled  bool   `koanf:"enabled" json:"enabled" envconfig:"enabled"`
-	CertPath string `koanf:"cert_path" json:"cert_path" envconfig:"cert_path"`
-	KeyPath  string `koanf:"key_path" json:"key_path" envconfig:"key_path"`
+	Host string `koanf:"host" json:"host" envconfig:"host"`
+	Port int    `koanf:"port" json:"port" envconfig:"port"`
 }
 
 type validatorClient struct {
@@ -37,43 +28,30 @@ type validatorClient struct {
 	conn   *grpc.ClientConn
 }
 
+type ValidationErrors struct {
+	NotValid bool
+	Errors   []*pb.ValidationError
+}
+
+func (ve *ValidationErrors) Error() string {
+	var messages []string
+	for _, err := range ve.Errors {
+		messages = append(messages, fmt.Sprintf("project %s: %s", err.ProjectId, err.Message))
+	}
+	return "validation failed: " + strings.Join(messages, "; ")
+}
+
 func (c *Config) Validate() error {
 	if c.Port <= 0 {
 		return errors.New("port must be greater than 0")
 	}
 
-	if c.TLSConfig != nil && c.TLSConfig.Enabled {
-		if c.TLSConfig.CertPath == "" {
-			return errors.New("cert_path required when tls is enabled")
-		}
-		if c.TLSConfig.KeyPath == "" {
-			return errors.New("key_path required when tls is enabled")
-		}
-	}
-
 	return nil
 }
 
-func New(ctx context.Context, cfg *Config) (ValidatorClient, error) {
-	var opts []grpc.DialOption
-
-	if cfg.TLSConfig != nil && cfg.TLSConfig.Enabled {
-		cert, err := tls.LoadX509KeyPair(
-			filepath.Clean(cfg.TLSConfig.CertPath),
-			filepath.Clean(cfg.TLSConfig.KeyPath),
-		)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		creds := credentials.NewTLS(&tls.Config{Certificates: []tls.Certificate{cert}})
-		opts = append(opts, grpc.WithTransportCredentials(creds))
-	} else {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-
+func New(ctx context.Context, cfg *Config, log *slog.Logger) (ValidatorClient, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-
-	conn, err := grpc.NewClient(addr, opts...)
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -83,6 +61,8 @@ func New(ctx context.Context, cfg *Config) (ValidatorClient, error) {
 		client: pb.NewValidatorServiceClient(conn),
 		conn:   conn,
 	}
+
+	log.Info("validator client created successfully", "serverAddress", addr)
 
 	return c, nil
 }
@@ -101,24 +81,11 @@ func (c *validatorClient) SendAverages(ctx context.Context, averageOutputs []*pb
 		return errors.WithStack(err)
 	}
 
-	if !res.Success && len(res.Errors) > 0 {
-		return &ValidationErrors{Errors: res.Errors}
-	}
-	return nil
-}
-
-func (c *validatorClient) NotifyProject(ctx context.Context, projectID string) error {
-	req := &pb.NotifyProjectRequest{
-		ProjectId: projectID,
-	}
-
-	res, err := c.client.NotifyProject(ctx, req)
-	if err != nil {
-		return errors.WithStack(err)
-	}
-
-	if !res.Acknowledged && len(res.Errors) > 0 {
-		return &NotifyProjectErrors{Errors: res.Errors}
+	if !res.Success {
+		return &ValidationErrors{
+			NotValid: res.NotValid,
+			Errors:   res.Errors,
+		}
 	}
 	return nil
 }

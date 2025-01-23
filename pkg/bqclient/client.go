@@ -83,16 +83,16 @@ func (c *bqClient) Close() error {
 
 func (c *Config) Validate() error {
 	if c == nil {
-		return errors.New("configuration required")
+		return errors.New("databse configuration required")
 	}
 	if c.ProjectID == "" {
-		return errors.New("project ID required")
+		return errors.New("database project ID required")
 	}
 	if c.DatasetID == "" {
-		return errors.New("dataset ID required")
+		return errors.New("database dataset ID required")
 	}
 	if c.CredsPath == "" {
-		return errors.New("creds path ID required")
+		return errors.New("databse creds path ID required")
 	}
 	return nil
 }

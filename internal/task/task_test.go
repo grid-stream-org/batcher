@@ -19,28 +19,30 @@ func (s *TaskTestSuite) SetupTest() {
 	// Setup test data
 	s.validDERs = []types.DER{
 		{
-			DerID:             "der1",
-			DeviceID:          "device1",
-			ProjectID:         "project1",
-			CurrentOutput:     100.5,
-			Units:             "kW",
-			IsOnline:          true,
-			IsStandalone:      false,
-			Timestamp:         types.NillableTime{Time: time.Now()},
-			ConnectionStartAt: types.NillableTime{Time: time.Now().Add(-1 * time.Hour)},
-			CurrentSoc:        85.5,
+			ProjectID:             "project1",
+			DerID:                 "der1",
+			CurrentOutput:         100.5,
+			Units:                 "kW",
+			IsOnline:              true,
+			IsStandalone:          false,
+			Timestamp:             types.NillableTime{Time: time.Now()},
+			ConnectionStartAt:     types.NillableTime{Time: time.Now().Add(-1 * time.Hour)},
+			CurrentSoc:            85.5,
+			ContractThreshold:     120.0,
+			PowerMeterMeasurement: 98.5,
 		},
 		{
-			DerID:             "der2",
-			DeviceID:          "device2",
-			ProjectID:         "project1",
-			CurrentOutput:     50.5,
-			Units:             "kW",
-			IsOnline:          true,
-			IsStandalone:      false,
-			Timestamp:         types.NillableTime{Time: time.Now()},
-			ConnectionStartAt: types.NillableTime{Time: time.Now().Add(-2 * time.Hour)},
-			CurrentSoc:        75.0,
+			ProjectID:             "project1",
+			DerID:                 "der2",
+			CurrentOutput:         50.5,
+			Units:                 "kW",
+			IsOnline:              true,
+			IsStandalone:          false,
+			Timestamp:             types.NillableTime{Time: time.Now()},
+			ConnectionStartAt:     types.NillableTime{Time: time.Now().Add(-2 * time.Hour)},
+			CurrentSoc:            75.0,
+			ContractThreshold:     80.0,
+			PowerMeterMeasurement: 49.8,
 		},
 	}
 }
@@ -74,7 +76,7 @@ func (s *TaskTestSuite) TestTaskExecute() {
 			expectError: nil,
 			validate: func(o *outcome.Outcome) {
 				s.Equal("project1", o.ProjectID)
-				s.Equal(151.0, o.TotalOutput) // 100.5 + 50.5
+				s.Equal(151.0, o.NetOutput) // 100.5 + 50.5
 				s.Len(o.Data, 2)
 				s.NotEmpty(o.TaskID)
 				s.Equal(1, o.WorkerID) // we'll use worker ID 1 for testing
@@ -84,21 +86,6 @@ func (s *TaskTestSuite) TestTaskExecute() {
 			name:        "empty DER array",
 			payload:     []types.DER{},
 			expectError: ErrNoDERs,
-			validate:    nil,
-		},
-		{
-			name: "various project IDs",
-			payload: []types.DER{
-				{
-					ProjectID:     "project1",
-					CurrentOutput: 100.5,
-				},
-				{
-					ProjectID:     "project2",
-					CurrentOutput: 50.5,
-				},
-			},
-			expectError: ErrVariousProjectIDs,
 			validate:    nil,
 		},
 		{

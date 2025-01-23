@@ -4,13 +4,11 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
-	"path/filepath"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/task"
-	"github.com/grid-stream-org/batcher/metrics"
 	"github.com/grid-stream-org/batcher/pkg/eventbus"
 	"github.com/pkg/errors"
 )
@@ -27,16 +25,31 @@ type Client struct {
 func NewClient(cfg *config.MQTT, eb eventbus.EventBus, log *slog.Logger) (*Client, error) {
 	c := &Client{
 		eventBus:   eb,
-		topic:      "projects/+/data",
+		topic:      "$share/batcher/projects/#",
 		cfg:        cfg,
 		subscribed: false,
 		log:        log.With("component", "mqtt_client"),
 	}
 
-	opts, err := createClientOptions(cfg, log)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
+	clientID := fmt.Sprintf("batcher-%s", uuid.NewString())
+	opts := mqtt.NewClientOptions().
+		AddBroker(fmt.Sprintf("tls://%s:%d", cfg.Host, cfg.Port)).
+		SetClientID(clientID).
+		SetUsername(cfg.Username).
+		SetPassword(cfg.Password).
+		SetProtocolVersion(4).
+		SetOnConnectHandler(func(c mqtt.Client) {
+			log.Info("connected to mqtt broker", "client_id", clientID)
+		}).
+		SetConnectionLostHandler(func(c mqtt.Client, err error) {
+			log.Error("lost connection to mqtt broker", "error", err)
+		}).
+		SetReconnectingHandler(func(c mqtt.Client, options *mqtt.ClientOptions) {
+			log.Warn("attempting to reconnect to mqtt broker")
+		}).
+		SetTLSConfig(&tls.Config{
+			InsecureSkipVerify: true,
+		})
 
 	c.client = mqtt.NewClient(opts)
 	log.Info("mqtt client created with options",
@@ -53,46 +66,6 @@ func NewClient(cfg *config.MQTT, eb eventbus.EventBus, log *slog.Logger) (*Clien
 		"write_timeout", opts.WriteTimeout.String(),
 	)
 	return c, nil
-}
-
-func createClientOptions(cfg *config.MQTT, log *slog.Logger) (*mqtt.ClientOptions, error) {
-	clientID := fmt.Sprintf("batcher-%s", uuid.NewString())
-	brokerURL := fmt.Sprintf("tls://%s:%d", cfg.Host, cfg.Port)
-
-	opts := mqtt.NewClientOptions().
-		AddBroker(brokerURL).
-		SetClientID(clientID).
-		SetUsername(cfg.Username).
-		SetPassword(cfg.Password).
-		SetProtocolVersion(4).
-		SetOnConnectHandler(func(c mqtt.Client) {
-			metrics.Local.Gauge(metrics.ConnectionStatus).WithLabelValues().Set(1)
-			log.Info("connected to mqtt broker", "client_id", clientID)
-		}).
-		SetConnectionLostHandler(func(c mqtt.Client, err error) {
-			metrics.Local.Gauge(metrics.ConnectionStatus).WithLabelValues().Set(0)
-			log.Error("lost connection to mqtt broker", "error", err)
-		}).
-		SetReconnectingHandler(func(c mqtt.Client, options *mqtt.ClientOptions) {
-			log.Warn("attempting to reconnect to mqtt broker")
-		})
-
-	tlsCfg := &tls.Config{
-		InsecureSkipVerify: cfg.TLSConfig.Enabled,
-	}
-
-	if tlsCfg.InsecureSkipVerify {
-		cert, err := tls.LoadX509KeyPair(
-			filepath.Clean(cfg.TLSConfig.CertPath),
-			filepath.Clean(cfg.TLSConfig.KeyPath),
-		)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		tlsCfg.Certificates = []tls.Certificate{cert}
-	}
-	opts.SetTLSConfig(tlsCfg)
-	return opts, nil
 }
 
 func (c *Client) Connect() error {
