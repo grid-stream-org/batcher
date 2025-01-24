@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/pkg/errors"
@@ -46,7 +47,7 @@ func (t *Task) Execute(workerId int) (*outcome.Outcome, error) {
 	for _, der := range ders {
 		netOutput -= der.CurrentOutput
 		derData := types.RealTimeDERData{
-			ID:  t.id,
+			ID:  uuid.New().String(),
 			DER: der,
 		}
 		data = append(data, derData)
