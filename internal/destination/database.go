@@ -88,7 +88,7 @@ func (d *databaseDestination) flushFunc(ctx context.Context, data *buffer.FlushO
 		input["project_averages"][i] = data.AvgOutputs[i]
 	}
 
-	if err := d.client.PutAll(ctx, input); err != nil {
+	if err := d.client.StreamPutAll(ctx, input); err != nil {
 		return errors.Wrap(err, "failed to write data to BigQuery")
 	}
 

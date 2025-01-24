@@ -135,7 +135,6 @@ func (b *Buffer) Flush(parentCtx context.Context) error {
 
 	wg.Wait()
 
-	// Reset cache regardless of errors
 	b.avgCache.Reset()
 
 	if validatorErr != nil || flushErr != nil {
