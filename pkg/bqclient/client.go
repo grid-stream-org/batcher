@@ -3,10 +3,10 @@ package bqclient
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"cloud.google.com/go/bigquery"
+	"github.com/matthew-collett/go-ctag/ctag"
 	"github.com/pkg/errors"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -31,7 +31,7 @@ var validTables = map[string]bool{
 }
 
 type BQClient interface {
-	Put(ctx context.Context, table string, query string, params []bigquery.QueryParameter, needsResults bool, data any) (*bigquery.RowIterator, error)
+	Put(ctx context.Context, table string, data any) error
 	StreamPut(ctx context.Context, table string, data any) error
 	StreamPutAll(ctx context.Context, inputs map[string][]any) error
 	Query(ctx context.Context, query string, params []bigquery.QueryParameter) (*bigquery.RowIterator, error)
@@ -54,22 +54,13 @@ type bqClient struct {
 }
 
 var (
-	validIdentifierRegex = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
-	errInvalidTable      = errors.New("invalid table name")
-	errInvalidColumn     = errors.New("invalid column identifier")
-	ErrNotFound          = errors.New("no rows returned")
+	errInvalidTable = errors.New("invalid table name")
+	ErrNotFound     = errors.New("no rows returned")
 )
 
 func validateTableName(table string) error {
 	if !validTables[table] {
 		return errors.Wrapf(errInvalidTable, "table %s not found in schema", table)
-	}
-	return nil
-}
-
-func validateColumnIdentifier(column string) error {
-	if !validIdentifierRegex.MatchString(column) {
-		return errors.Wrapf(errInvalidColumn, "column %s contains invalid characters", column)
 	}
 	return nil
 }
@@ -116,30 +107,42 @@ func (c *bqClient) execute(ctx context.Context, query string, params []bigquery.
 	return nil, nil
 }
 
-func (c *bqClient) Put(
-	ctx context.Context,
-	table string,
-	query string,
-	params []bigquery.QueryParameter,
-	needsResults bool,
-	data any,
-) (*bigquery.RowIterator, error) {
+func (c *bqClient) Put(ctx context.Context, table string, data any) error {
 	if err := validateTableName(table); err != nil {
-		return nil, err
-	}
-	if needsResults {
-		res, err := c.execute(ctx, query, params, needsResults)
-		if err != nil {
-			return nil, err
-		}
-		return res, nil
+		return err
 	}
 
-	_, err := c.execute(ctx, query, params, needsResults)
+	tags, err := ctag.GetTags("bigquery", data)
 	if err != nil {
-		return nil, err
+		return errors.WithStack(err)
 	}
-	return nil, nil
+
+	var fields []string
+	var placeholders []string
+	var params []bigquery.QueryParameter
+
+	for _, tag := range tags {
+		fields = append(fields, tag.Name)
+		placeholders = append(placeholders, fmt.Sprintf("@%s", tag.Name))
+		params = append(params, bigquery.QueryParameter{
+			Name:  tag.Name,
+			Value: tag.Field,
+		})
+	}
+
+	query := fmt.Sprintf(`
+        INSERT INTO %s.%s
+        (%s)
+        VALUES
+        (%s)`,
+		c.cfg.DatasetID,
+		table,
+		strings.Join(fields, ", "),
+		strings.Join(placeholders, ", "),
+	)
+
+	_, err = c.execute(ctx, query, params, false)
+	return err
 }
 
 func (c *bqClient) StreamPut(ctx context.Context, table string, data any) error {
@@ -221,9 +224,6 @@ func (c *bqClient) Update(ctx context.Context, table string, id string, updates 
 	}
 
 	for field, value := range updates {
-		if err := validateColumnIdentifier(field); err != nil {
-			return err
-		}
 		setStatements = append(setStatements, fmt.Sprintf("%s = @%s", field, field))
 		params = append(params, bigquery.QueryParameter{
 			Name:  field,

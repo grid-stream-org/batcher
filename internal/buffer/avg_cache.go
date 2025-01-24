@@ -10,8 +10,6 @@ import (
 	"github.com/grid-stream-org/batcher/internal/types"
 )
 
-// TODO fix these tests
-
 type AvgCache struct {
 	mu        sync.Mutex
 	items     map[string]*RunningAvg
