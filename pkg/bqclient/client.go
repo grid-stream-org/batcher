@@ -31,8 +31,9 @@ var validTables = map[string]bool{
 }
 
 type BQClient interface {
-	Put(ctx context.Context, table string, data any) error
-	PutAll(ctx context.Context, inputs map[string][]any) error
+	Put(ctx context.Context, table string, query string, params []bigquery.QueryParameter, needsResults bool, data any) (*bigquery.RowIterator, error)
+	StreamPut(ctx context.Context, table string, data any) error
+	StreamPutAll(ctx context.Context, inputs map[string][]any) error
 	Query(ctx context.Context, query string, params []bigquery.QueryParameter) (*bigquery.RowIterator, error)
 	QueryRow(ctx context.Context, query string, params []bigquery.QueryParameter, dst any) error
 	Update(ctx context.Context, table string, id string, updates map[string]interface{}) error
@@ -115,7 +116,33 @@ func (c *bqClient) execute(ctx context.Context, query string, params []bigquery.
 	return nil, nil
 }
 
-func (c *bqClient) Put(ctx context.Context, table string, data any) error {
+func (c *bqClient) Put(
+	ctx context.Context,
+	table string,
+	query string,
+	params []bigquery.QueryParameter,
+	needsResults bool,
+	data any,
+) (*bigquery.RowIterator, error) {
+	if err := validateTableName(table); err != nil {
+		return nil, err
+	}
+	if needsResults {
+		res, err := c.execute(ctx, query, params, needsResults)
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
+	}
+
+	_, err := c.execute(ctx, query, params, needsResults)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (c *bqClient) StreamPut(ctx context.Context, table string, data any) error {
 	if err := validateTableName(table); err != nil {
 		return err
 	}
@@ -126,7 +153,7 @@ func (c *bqClient) Put(ctx context.Context, table string, data any) error {
 	return nil
 }
 
-func (c *bqClient) PutAll(ctx context.Context, inputs map[string][]any) error {
+func (c *bqClient) StreamPutAll(ctx context.Context, inputs map[string][]any) error {
 	if len(inputs) == 0 {
 		return errors.New("inputs cannot be empty")
 	}
