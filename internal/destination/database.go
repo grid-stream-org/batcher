@@ -46,11 +46,12 @@ func (d *databaseDestination) Add(ctx context.Context, data any) error {
 }
 
 func (d *databaseDestination) Close() error {
+	d.buf.Stop()
+
 	if err := d.client.Close(); err != nil {
 		return errors.WithStack(err)
 	}
 
-	d.buf.Stop()
 	d.log.Info("database destination closed")
 	return nil
 }
@@ -65,13 +66,12 @@ func (d *databaseDestination) flushFunc(ctx context.Context, data *buffer.FlushO
 	for _, outcome := range data.Outcomes {
 		derCount += len(outcome.Data)
 	}
-
 	if derCount == 0 {
 		d.log.Debug("no DER data to flush")
 		return nil
 	}
 
-	derData := make([]types.RealTimeDERData, derCount)
+	derData := make([]types.RealTimeDERData, 0, derCount)
 	for _, outcome := range data.Outcomes {
 		derData = append(derData, outcome.Data...)
 	}
@@ -80,8 +80,6 @@ func (d *databaseDestination) flushFunc(ctx context.Context, data *buffer.FlushO
 		"der_data":         make([]any, len(derData)),
 		"project_averages": make([]any, len(data.AvgOutputs)),
 	}
-
-	d.log.Debug("preparing data for flush", "der_data_count", len(derData), "avg_outputs_count", len(data.AvgOutputs))
 
 	for i := range derData {
 		input["der_data"][i] = derData[i]

@@ -21,7 +21,7 @@
     }
   },
   "validator": {
-    "host:": "localhost",
+    "host": "localhost",
     "port": 3012
   },
   "mqtt": {

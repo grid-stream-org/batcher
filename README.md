@@ -1,7 +1,7 @@
 # <p align="center">Batcher - Micro-batching Data Processing Service</p>
 
 <p align="center"><img src="assets/logo.svg" width="350px"/></p>
-<p align="center">The micro-batching data-processing Go service responsible for buffering incoming data from a MQTT broker, normalizing it, and writiting to a destination.</p>
+<p align="center">The micro-batching data-processing Go service responsible for buffering incoming data from a MQTT broker, normalizing it, and writing to a destination.</p>
 
 ## 🧭 Table of Contents
 

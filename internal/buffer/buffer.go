@@ -11,7 +11,7 @@ import (
 	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/grid-stream-org/batcher/pkg/validator"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
+	"go.uber.org/multierr"
 )
 
 type FlushOutcome struct {
@@ -29,7 +29,7 @@ type Buffer struct {
 	avgCache  *AvgCache
 	flushFunc FlushFunc
 	log       *slog.Logger
-	cancel    context.CancelFunc
+	done      chan struct{}
 }
 
 func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, log *slog.Logger) *Buffer {
@@ -40,7 +40,7 @@ func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, 
 		flushFunc: flushFunc,
 		log:       log.With("component", "buffer"),
 		avgCache:  NewAvgCache(cfg.StartTime, cfg.StartTime.Add(cfg.Interval)),
-		cancel:    nil,
+		done:      make(chan struct{}),
 	}
 	log.Info("buffer initialized", "start_time", cfg.StartTime.Format(time.RFC3339), "interval", cfg.Interval, "offset", cfg.Offset)
 	return buf
@@ -55,16 +55,6 @@ func (b *Buffer) Add(ctx context.Context, data *outcome.Outcome) {
 }
 
 func (b *Buffer) Start(ctx context.Context) {
-	b.mu.Lock()
-	if b.cancel != nil {
-		b.mu.Unlock()
-		b.log.Warn("buffer already started")
-		return
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	b.cancel = cancel
-	b.mu.Unlock()
-
 	go b.autoFlush(ctx)
 }
 
@@ -77,10 +67,11 @@ func (b *Buffer) autoFlush(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			b.log.Debug("context canceled, exiting auto flush")
+			b.log.Debug("context canceled, performing final flush")
 			if err := b.Flush(context.Background()); err != nil {
 				b.log.Error("failed to flush buffer during shutdown", "error", err)
 			}
+			close(b.done)
 			return
 		case <-timer.C:
 			if err := b.Flush(ctx); err != nil {
@@ -92,14 +83,7 @@ func (b *Buffer) autoFlush(ctx context.Context) {
 }
 
 func (b *Buffer) Stop() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	if b.cancel != nil {
-		b.cancel()
-		b.cancel = nil
-		b.log.Debug("buffer stopped")
-	}
+	<-b.done
 }
 
 func (b *Buffer) Flush(parentCtx context.Context) error {
@@ -107,61 +91,64 @@ func (b *Buffer) Flush(parentCtx context.Context) error {
 	defer timeoutCancel()
 
 	b.mu.Lock()
-	totalStart := time.Now()
 	if len(b.data) == 0 {
 		b.mu.Unlock()
 		b.log.Info("nothing to flush")
 		return nil
 	}
 
+	totalStart := time.Now()
 	b.log.Debug("starting flush", "data_length", len(b.data))
 	outcomes := b.data
 	b.data = make([]outcome.Outcome, 0, len(b.data))
 	b.mu.Unlock()
 
-	g, ctx := errgroup.WithContext(timeoutCtx)
 	var validatorTime time.Duration
 	var flushTime time.Duration
 	var avgOutputs []types.AverageOutput
+	var validatorErr, flushErr error
+	var wg sync.WaitGroup
 
-	g.Go(func() error {
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
 		validatorStart := time.Now()
-		if err := b.vc.SendAverages(ctx, b.avgCache.GetProtoOutputs()); err != nil {
-			b.log.Error("failed to send averages to validator", "error", err)
-			return errors.WithStack(err)
+		if err := b.vc.SendAverages(timeoutCtx, b.avgCache.GetProtoOutputs()); err != nil {
+			validatorErr = errors.WithStack(err)
 		}
 		validatorTime = time.Since(validatorStart)
-		return nil
-	})
+	}()
 
-	g.Go(func() error {
+	go func() {
+		defer wg.Done()
 		avgOutputs = b.avgCache.GetOutputs()
-
 		data := &FlushOutcome{
 			Outcomes:   outcomes,
 			AvgOutputs: avgOutputs,
 		}
-
 		flushStart := time.Now()
-		if err := b.flushFunc(ctx, data); err != nil {
-			b.log.Error("failed to flush data to destination", "error", err)
-			return errors.WithStack(err)
+		if err := b.flushFunc(timeoutCtx, data); err != nil {
+			flushErr = errors.WithStack(err)
 		}
 		flushTime = time.Since(flushStart)
-		return nil
-	})
+	}()
 
-	if err := g.Wait(); err != nil {
-		return errors.WithStack(err)
-	}
+	wg.Wait()
 
+	// Reset cache regardless of errors
 	b.avgCache.Reset()
 
+	if validatorErr != nil || flushErr != nil {
+		return errors.WithStack(multierr.Combine(validatorErr, flushErr))
+	}
+
 	totalTime := time.Since(totalStart)
-	b.log.Info("buffer flushed", "outcomes", len(outcomes),
+	b.log.Info("buffer flushed",
+		"outcomes", len(outcomes),
 		"average_outputs", len(avgOutputs),
 		"validator_ms", validatorTime.Milliseconds(),
 		"flush_ms", flushTime.Milliseconds(),
 		"total_ms", totalTime.Milliseconds())
+
 	return nil
 }

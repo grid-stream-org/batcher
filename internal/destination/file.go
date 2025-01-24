@@ -54,11 +54,12 @@ func (d *fileDestination) Add(ctx context.Context, data any) error {
 }
 
 func (d *fileDestination) Close() error {
+	d.buf.Stop()
+
 	if err := d.file.Close(); err != nil {
 		return errors.WithStack(err)
 	}
 
-	d.buf.Stop()
 	d.log.Info("file destination closed")
 	return nil
 }
