@@ -11,6 +11,7 @@ type Outcome struct {
 	WorkerID          int                     `json:"worker_id"`
 	TaskID            string                  `json:"task_id"`
 	ProjectID         string                  `json:"project_id"`
+	Baseline          float64                 `json:"baseline"`
 	ContractThreshold float64                 `json:"contract_threshold"`
 	NetOutput         float64                 `json:"net_output"`
 	DurationMS        int64                   `json:"duration_ms"`
@@ -20,8 +21,10 @@ type Outcome struct {
 
 func New(workerID int, taskID string, projectID string, data []types.RealTimeDERData, netOutput float64, duration time.Duration) *Outcome {
 	var contractThreshold float64
+	var baseline float64
 	if len(data) > 0 {
 		contractThreshold = data[0].ContractThreshold
+		baseline = data[0].Baseline
 	}
 
 	return &Outcome{
@@ -29,6 +32,7 @@ func New(workerID int, taskID string, projectID string, data []types.RealTimeDER
 		WorkerID:          workerID,
 		TaskID:            taskID,
 		ContractThreshold: contractThreshold,
+		Baseline:          baseline,
 		ProjectID:         projectID,
 		NetOutput:         netOutput,
 		DurationMS:        duration.Milliseconds(),
@@ -41,12 +45,15 @@ func (o *Outcome) LogFields() []any {
 	fields := []any{
 		"component", "outcome",
 		"success", o.Success,
+		"contract_threshold", o.ContractThreshold,
+		"baseline", o.Baseline,
 		"worker_id", o.WorkerID,
 		"task_id", o.TaskID,
 		"project_id", o.ProjectID,
 		"net_output", o.NetOutput,
 		"duration_ms", o.DurationMS,
 		"created_at", o.CreatedAt.Format(time.RFC3339),
+		"data", o.Data,
 	}
 	return fields
 }

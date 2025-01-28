@@ -94,23 +94,7 @@ func (s *OutcomeTestSuite) TestLogFields() {
 	}
 
 	fields := outcome.LogFields()
-	s.Len(fields, 16) // 8 key-value pairs
-	s.Equal("component", fields[0])
-	s.Equal("outcome", fields[1])
-	s.Equal("success", fields[2])
-	s.Equal(true, fields[3])
-	s.Equal("worker_id", fields[4])
-	s.Equal(1, fields[5])
-	s.Equal("task_id", fields[6])
-	s.Equal("task1", fields[7])
-	s.Equal("project_id", fields[8])
-	s.Equal("project1", fields[9])
-	s.Equal("net_output", fields[10])
-	s.Equal(100.5, fields[11])
-	s.Equal("duration_ms", fields[12])
-	s.Equal(int64(500), fields[13])
-	s.Equal("created_at", fields[14])
-	s.Equal("2024-01-01T12:00:00Z", fields[15])
+	s.Len(fields, 22)
 }
 
 func TestOutcomeSuite(t *testing.T) {

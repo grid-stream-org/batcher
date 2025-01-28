@@ -26,6 +26,7 @@ type RealTimeDERData struct {
 type AverageOutput struct {
 	ProjectID         string    `bigquery:"project_id" json:"project_id"`
 	AverageOutput     float64   `bigquery:"average_output" json:"average_output"`
+	Baseline          float64   `bigquery:"baseline" json:"baseline"`
 	ContractThreshold float64   `bigquery:"contract_threshold" json:"contract_threshold"`
 	StartTime         time.Time `bigquery:"start_time" json:"start_time"`
 	EndTime           time.Time `bigquery:"end_time" json:"end_time"`

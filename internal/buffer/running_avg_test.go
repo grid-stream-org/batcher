@@ -13,11 +13,13 @@ type RunningAvgTestSuite struct {
 	suite.Suite
 	startTime time.Time
 	endTime   time.Time
+	baseline  float64
 }
 
 func (s *RunningAvgTestSuite) SetupTest() {
 	s.startTime = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	s.endTime = time.Date(2024, 1, 1, 1, 0, 0, 0, time.UTC)
+	s.baseline = 100
 }
 
 func (s *RunningAvgTestSuite) TestNewRunningAvg() {
@@ -32,7 +34,7 @@ func (s *RunningAvgTestSuite) TestNewRunningAvg() {
 		},
 	}}
 	o := outcome.New(1, "task1", "test-project", data, 0, time.Second)
-	ra := NewRunningAvg(o, s.startTime, s.endTime)
+	ra := NewRunningAvg(o, s.startTime, s.endTime, s.baseline)
 
 	s.NotNil(ra)
 	s.Equal(float64(0), ra.sum)
@@ -95,7 +97,7 @@ func (s *RunningAvgTestSuite) TestAdd() {
 				},
 			}}
 			o := outcome.New(1, "task1", "test-project", data, 0, time.Second)
-			ra := NewRunningAvg(o, s.startTime, s.endTime)
+			ra := NewRunningAvg(o, s.startTime, s.endTime, s.baseline)
 
 			for _, v := range tc.values {
 				ra.Add(v)

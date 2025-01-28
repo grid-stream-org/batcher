@@ -31,7 +31,7 @@ func (ac *AvgCache) Add(o *outcome.Outcome) {
 
 	ra, ok := ac.items[o.ProjectID]
 	if !ok {
-		ra = NewRunningAvg(o, ac.startTime, ac.endTime)
+		ra = NewRunningAvg(o, ac.startTime, ac.endTime, o.Baseline)
 		ac.items[o.ProjectID] = ra
 	}
 	ra.Add(o.NetOutput)

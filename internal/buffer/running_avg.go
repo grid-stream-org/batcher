@@ -13,13 +13,14 @@ type RunningAvg struct {
 	average *types.AverageOutput
 }
 
-func NewRunningAvg(o *outcome.Outcome, startTime time.Time, endTime time.Time) *RunningAvg {
+func NewRunningAvg(o *outcome.Outcome, startTime time.Time, endTime time.Time, baseline float64) *RunningAvg {
 	return &RunningAvg{
 		sum:   0,
 		count: 0,
 		average: &types.AverageOutput{
 			ProjectID:         o.ProjectID,
 			StartTime:         startTime,
+			Baseline:          baseline,
 			ContractThreshold: o.ContractThreshold,
 			EndTime:           endTime,
 		},
