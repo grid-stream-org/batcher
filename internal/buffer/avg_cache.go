@@ -57,6 +57,7 @@ func (ac *AvgCache) GetProtoOutputs() []*pb.AverageOutput {
 		avg := &pb.AverageOutput{
 			ProjectId:         ra.average.ProjectID,
 			AverageOutput:     ra.average.AverageOutput,
+			Baseline:          ra.average.Baseline,
 			ContractThreshold: ra.average.ContractThreshold,
 			StartTime:         ra.average.StartTime.Format(time.RFC3339),
 			EndTime:           ra.average.EndTime.Format(time.RFC3339),
