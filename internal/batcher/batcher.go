@@ -8,8 +8,8 @@ import (
 	"github.com/grid-stream-org/batcher/internal/destination"
 	"github.com/grid-stream-org/batcher/internal/mqtt"
 	"github.com/grid-stream-org/batcher/internal/task"
-	"github.com/grid-stream-org/batcher/pkg/eventbus"
-	"github.com/grid-stream-org/batcher/pkg/validator"
+	"github.com/grid-stream-org/go-commons/pkg/eventbus"
+	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 )

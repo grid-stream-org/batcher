@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/grid-stream-org/batcher/pkg/bqclient"
-	"github.com/grid-stream-org/batcher/pkg/logger"
-	"github.com/grid-stream-org/batcher/pkg/validator"
+	"github.com/grid-stream-org/go-commons/pkg/bqclient"
+	"github.com/grid-stream-org/go-commons/pkg/logger"
+	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/stretchr/testify/suite"
 )
 

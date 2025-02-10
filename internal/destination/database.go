@@ -8,8 +8,8 @@ import (
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/grid-stream-org/batcher/internal/types"
-	"github.com/grid-stream-org/batcher/pkg/bqclient"
-	"github.com/grid-stream-org/batcher/pkg/validator"
+	"github.com/grid-stream-org/go-commons/pkg/bqclient"
+	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 )
 

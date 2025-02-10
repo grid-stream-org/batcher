@@ -5,9 +5,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/grid-stream-org/batcher/pkg/bqclient"
-	"github.com/grid-stream-org/batcher/pkg/logger"
-	"github.com/grid-stream-org/batcher/pkg/validator"
+	"github.com/grid-stream-org/go-commons/pkg/bqclient"
+	"github.com/grid-stream-org/go-commons/pkg/logger"
+	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"

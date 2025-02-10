@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/task"
-	"github.com/grid-stream-org/batcher/pkg/eventbus"
+	"github.com/grid-stream-org/go-commons/pkg/eventbus"
 	"github.com/pkg/errors"
 )
 

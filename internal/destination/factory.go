@@ -5,7 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/grid-stream-org/batcher/internal/config"
-	"github.com/grid-stream-org/batcher/pkg/validator"
+	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 )
 
