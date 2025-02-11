@@ -5,7 +5,7 @@ go 1.23.2
 require (
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/google/uuid v1.6.0
-	github.com/grid-stream-org/go-commons v0.2.0
+	github.com/grid-stream-org/go-commons v1.0.0
 	github.com/grid-stream-org/grid-stream-protos v0.4.0
 	github.com/knadh/koanf/parsers/json v0.1.0
 	github.com/knadh/koanf/providers/file v1.1.2
