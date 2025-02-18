@@ -18,10 +18,6 @@ type drEventDestination struct {
 	log    *slog.Logger
 }
 
-/*
-Honestly just keep everything how it is and make this a new streaming destination. maybe move validator client in here though and rename the destiantion?
-*/
-
 func newDREventDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
 	client, err := bqclient.New(ctx, cfg.Database)
 	if err != nil {
