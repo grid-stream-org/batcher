@@ -38,13 +38,8 @@ jobs:
       
       - name: Create K8s Secrets
         run: |
-          kubectl create secret generic bigquery-credentials \
-            --from-file=credentials.json=$(gcloud secrets versions access latest --secret=CREDS_PATH_SECRET) \
-            --dry-run=client -o yaml | kubectl apply -f -
-          
-          kubectl create secret generic batcher-config \
-            --from-file=config.json=$(gcloud secrets versions access latest --secret=BATCHER_STREAM_CONFIG_SECRET) \
-            --dry-run=client -o yaml | kubectl apply -f -
+          gcloud secrets versions access latest --secret=CREDS_PATH_SECRET | kubectl create secret generic bigquery-credentials --from-file=credentials.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -
+          gcloud secrets versions access latest --secret=BATCHER_STREAM_CONFIG_SECRET | kubectl create secret generic batcher-config --from-file=config.json=/dev/stdin --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply Kubernetes manifests
         run: kubectl apply -f deploy/
