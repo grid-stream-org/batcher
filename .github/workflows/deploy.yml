@@ -2,6 +2,10 @@ name: deploy
 on:
   push:
     branches: [ main ]
+
+permissions:
+  contents: write
+
 jobs:
   deploy:
     name: deploy
@@ -44,7 +48,7 @@ jobs:
         env:
           BIGQUERY_CREDS: ${{ secrets.CREDS_PATH_SECRET }}
           BATCHER_CONFIG: ${{ secrets.BATCHER_STREAM_CONFIG_SECRET }}
-          
+
       - name: Apply Kubernetes manifests
         run: kubectl apply -f deploy/
 
