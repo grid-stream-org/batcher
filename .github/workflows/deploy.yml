@@ -18,6 +18,8 @@ jobs:
         run: |
           gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
           gcloud auth configure-docker us-docker.pkg.dev
+          gcloud components install kubectl
+          gcloud components install gke-gcloud-auth-plugin
           gcloud container clusters get-credentials ${{ secrets.GCP_GKE_CLUSTER }} --region ${{ secrets.GCP_REGION }}
       
       - name: Build and Push Docker Image
