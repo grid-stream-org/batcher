@@ -47,6 +47,6 @@ func (d *streamDestination) Close() error {
 		return errors.WithStack(err)
 	}
 
-	d.log.Info("streaming database destination closed")
+	d.log.Info("stream destination closed")
 	return nil
 }
