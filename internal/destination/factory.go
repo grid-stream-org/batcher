@@ -13,7 +13,7 @@ func NewDestination(ctx context.Context, cfg *config.Destination, log *slog.Logg
 	case "dr_event":
 		return newDREventDestination(ctx, cfg, log)
 	case "stdout":
-		return newStdoutDestination(ctx, cfg, log)
+		return newStdoutDestination(log)
 	case "stream":
 		return newStreamDestination(ctx, cfg, log)
 	default:

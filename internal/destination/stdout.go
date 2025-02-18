@@ -8,7 +8,6 @@ import (
 	"os"
 	"sync"
 
-	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
 	"github.com/pkg/errors"
 )
@@ -20,7 +19,7 @@ type stdoutDestination struct {
 	enc    *json.Encoder
 }
 
-func newStdoutDestination(_ context.Context, _ *config.Destination, log *slog.Logger) (Destination, error) {
+func newStdoutDestination(log *slog.Logger) (Destination, error) {
 	d := &stdoutDestination{
 		writer: os.Stdout,
 		log:    log.With("component", "stdout_destination"),
