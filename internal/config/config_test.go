@@ -16,12 +16,15 @@ type ConfigTestSuite struct {
 
 func (s *ConfigTestSuite) newValidConfig() *Config {
 	return &Config{
+		Batcher: &Batcher{
+			Timeout: time.Minute * 5,
+		},
 		Pool: &Pool{
 			NumWorkers: 4,
 			Capacity:   100,
 		},
 		Destination: &Destination{
-			Type: "database",
+			Type: "dr_event",
 			Database: &bqclient.Config{
 				ProjectID: "test-project",
 				DatasetID: "test-dataset",
@@ -31,6 +34,10 @@ func (s *ConfigTestSuite) newValidConfig() *Config {
 				StartTime: time.Now(),
 				Interval:  time.Minute,
 				Offset:    time.Second * 30,
+				Validator: &validator.Config{
+					Host: "localhost",
+					Port: 8080,
+				},
 			},
 		},
 		MQTT: &MQTT{
@@ -43,10 +50,6 @@ func (s *ConfigTestSuite) newValidConfig() *Config {
 		Log: &logger.Config{
 			Level:  "INFO",
 			Format: "json",
-		},
-		Validator: &validator.Config{
-			Host: "localhost",
-			Port: 8080,
 		},
 	}
 }
@@ -141,27 +144,27 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 			errorMsg:    "invalid destination type: invalid",
 		},
 		{
-			name: "file type without path",
+			name: "stream type without database",
 			modify: func(d *Destination) {
-				d.Type = "file"
-				d.Path = ""
+				d.Type = "stream"
+				d.Database = nil
 			},
 			expectError: true,
-			errorMsg:    "file path required when destination is 'file'",
+			errorMsg:    "database configuration required",
 		},
 		{
-			name: "database type without buffer",
+			name: "dr_event type without buffer",
 			modify: func(d *Destination) {
-				d.Type = "database"
+				d.Type = "dr_event"
 				d.Buffer = nil
 			},
 			expectError: true,
-			errorMsg:    "buffer configuration required when type is 'database'",
+			errorMsg:    "buffer configuration required",
 		},
 		{
 			name: "buffer zero interval",
 			modify: func(d *Destination) {
-				d.Type = "database"
+				d.Type = "dr_event"
 				d.Buffer.Interval = 0
 			},
 			expectError: true,
@@ -170,7 +173,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer negative offset",
 			modify: func(d *Destination) {
-				d.Type = "database"
+				d.Type = "dr_event"
 				d.Buffer.Offset = -1 * time.Second
 			},
 			expectError: true,
@@ -179,7 +182,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer offset equals interval",
 			modify: func(d *Destination) {
-				d.Type = "database"
+				d.Type = "dr_event"
 				d.Buffer.Interval = time.Second
 				d.Buffer.Offset = time.Second
 			},
@@ -189,18 +192,35 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer zero start time",
 			modify: func(d *Destination) {
-				d.Type = "database"
+				d.Type = "dr_event"
 				d.Buffer.StartTime = time.Time{}
 			},
 			expectError: true,
 			errorMsg:    "buffer start time required",
+		},
+		{
+			name: "stdout type is valid",
+			modify: func(d *Destination) {
+				d.Type = "stdout"
+				d.Buffer = nil
+				d.Database = nil
+			},
+			expectError: false,
+		},
+		{
+			name: "stream type is valid",
+			modify: func(d *Destination) {
+				d.Type = "stream"
+				d.Buffer = nil
+			},
+			expectError: false,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			dest := &Destination{
-				Type: "database",
+				Type: "dr_event",
 				Database: &bqclient.Config{
 					ProjectID: "test-project",
 					DatasetID: "test-dataset",
@@ -210,6 +230,10 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 					StartTime: time.Now(),
 					Interval:  time.Minute,
 					Offset:    time.Second * 30,
+					Validator: &validator.Config{
+						Host: "localhost",
+						Port: 8080,
+					},
 				},
 			}
 			tc.modify(dest)

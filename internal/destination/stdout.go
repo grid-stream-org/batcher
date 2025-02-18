@@ -3,51 +3,60 @@ package destination
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"io"
 	"log/slog"
+	"os"
+	"sync"
 
-	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
-	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 )
 
 type stdoutDestination struct {
-	buf *buffer.Buffer
-	log *slog.Logger
+	writer io.Writer
+	log    *slog.Logger
+	mu     sync.Mutex
+	enc    *json.Encoder
 }
 
-func newStdoutDestination(ctx context.Context, cfg *config.Destination, vc validator.ValidatorClient, log *slog.Logger) (Destination, error) {
+func newStdoutDestination(_ context.Context, _ *config.Destination, log *slog.Logger) (Destination, error) {
 	d := &stdoutDestination{
-		log: log.With("component", "stdout_destination"),
+		writer: os.Stdout,
+		log:    log.With("component", "stdout_destination"),
 	}
-	d.buf = buffer.New(cfg.Buffer, d.flushFunc, vc, log)
-	d.buf.Start(ctx)
+
+	d.enc = json.NewEncoder(d.writer)
+	d.enc.SetIndent("", "  ")
+	d.enc.SetEscapeHTML(false)
+
+	d.log.Info("stdout destination initialized")
 	return d, nil
 }
 
-func (d *stdoutDestination) Add(ctx context.Context, data any) error {
+func (d *stdoutDestination) Add(_ context.Context, data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
 		return errors.Errorf("expected *outcome.Outcome, got %T", data)
 	}
-	d.buf.Add(ctx, outcome)
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if err := d.enc.Encode(outcome); err != nil {
+		return errors.WithStack(err)
+	}
+
 	return nil
 }
 
 func (d *stdoutDestination) Close() error {
-	d.buf.Stop()
-	d.log.Info("stdout destination closed")
-	return nil
-}
-
-func (d *stdoutDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return errors.WithStack(err)
+	if f, ok := d.writer.(*os.File); ok {
+		if err := f.Sync(); err != nil {
+			return errors.WithStack(err)
+		}
 	}
 
-	fmt.Println(string(out))
+	d.log.Info("stdout destination closed")
 	return nil
 }

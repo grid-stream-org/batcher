@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"time"
@@ -15,12 +16,11 @@ import (
 )
 
 type Config struct {
-	Batcher     *Batcher          `koanf:"batcher"`
-	Pool        *Pool             `koanf:"pool"`
-	Destination *Destination      `koanf:"destination"`
-	Validator   *validator.Config `koanf:"validator"`
-	MQTT        *MQTT             `koanf:"mqtt"`
-	Log         *logger.Config    `koanf:"log"`
+	Batcher     *Batcher       `koanf:"batcher"`
+	Pool        *Pool          `koanf:"pool"`
+	Destination *Destination   `koanf:"destination"`
+	MQTT        *MQTT          `koanf:"mqtt"`
+	Log         *logger.Config `koanf:"log"`
 }
 
 type Batcher struct {
@@ -34,15 +34,15 @@ type Pool struct {
 
 type Destination struct {
 	Type     string           `koanf:"type"`
-	Path     string           `koanf:"path"`
 	Buffer   *Buffer          `koanf:"buffer"`
 	Database *bqclient.Config `koanf:"database"`
 }
 
 type Buffer struct {
-	StartTime time.Time     `koanf:"start_time"`
-	Interval  time.Duration `koanf:"interval"`
-	Offset    time.Duration `koanf:"offset"`
+	StartTime time.Time         `koanf:"start_time"`
+	Interval  time.Duration     `koanf:"interval"`
+	Offset    time.Duration     `koanf:"offset"`
+	Validator *validator.Config `koanf:"validator"`
 }
 
 type MQTT struct {
@@ -55,7 +55,12 @@ type MQTT struct {
 
 func Load() (*Config, error) {
 	k := koanf.New(".")
-	path := filepath.Join("configs", "config.json")
+
+	path := os.Getenv("CONFIG_PATH")
+	if path == "" {
+		path = filepath.Join("configs", "config.json")
+		logger.Default().Info("CONFIG_PATH not set, using default", "path", path)
+	}
 	if err := k.Load(file.Provider(path), json.Parser()); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -80,6 +85,10 @@ func (c *Config) Validate() error {
 		c.Pool.Capacity = 0
 	}
 
+	if c.Batcher == nil {
+		c.Batcher = &Batcher{Timeout: 0}
+	}
+
 	if err := c.Destination.validate(); err != nil {
 		return errors.WithStack(err)
 	}
@@ -87,9 +96,6 @@ func (c *Config) Validate() error {
 		return errors.WithStack(err)
 	}
 	if err := c.Log.Validate(); err != nil {
-		return errors.WithStack(err)
-	}
-	if err := c.Validator.Validate(); err != nil {
 		return errors.WithStack(err)
 	}
 
@@ -102,42 +108,53 @@ func (d *Destination) validate() error {
 	}
 
 	validTypes := []string{
-		"file",
-		"database",
+		"dr_event",
 		"stdout",
+		"stream",
 	}
 	if !slices.Contains(validTypes, d.Type) {
 		return errors.Errorf("invalid destination type: %s", d.Type)
 	}
 
-	if d.Type == "file" {
-		if d.Path == "" {
-			return errors.New("file path required when destination is 'file'")
+	if d.Type == "dr_event" {
+		if err := d.Database.Validate(); err != nil {
+			return errors.WithStack(err)
+		}
+
+		if err := d.Buffer.validate(); err != nil {
+			return errors.WithStack(err)
 		}
 	}
 
-	if d.Type == "database" {
+	if d.Type == "stream" {
 		if err := d.Database.Validate(); err != nil {
 			return errors.WithStack(err)
 		}
 	}
 
-	if d.Buffer == nil {
-		return errors.New("buffer configuration required when type is 'database'")
+	return nil
+}
+
+func (b *Buffer) validate() error {
+	if b == nil {
+		return errors.New("buffer configuration required")
 	}
-	if d.Buffer.Interval <= 0 {
+	if b.Interval <= 0 {
 		return errors.New("buffer interval must be positive")
 	}
-	if d.Buffer.Offset < 0 {
+	if b.Offset < 0 {
 		return errors.New("buffer offset cannot be negative")
 	}
-	if d.Buffer.Offset >= d.Buffer.Interval {
+	if b.Offset >= b.Interval {
 		return errors.New("buffer offset must be less than interval")
 	}
-	if d.Buffer.StartTime.IsZero() {
+	if b.StartTime.IsZero() {
 		return errors.New("buffer start time required")
 	}
 
+	if err := b.Validator.Validate(); err != nil {
+		return errors.WithStack(err)
+	}
 	return nil
 }
 

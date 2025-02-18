@@ -7,22 +7,22 @@
     "capacity": 300
   },
   "destination": {
-    "type": "stdout",
-    "path": "./out/batcher_out.json",
+    "type": "dr_event",
     "buffer": {
+      "enabled": false,
       "start_time": "2025-01-09T19:55:00Z",
       "interval": "5m",
-      "offset": "10s"
+      "offset": "10s",
+      "validator": {
+        "host": "localhost",
+        "port": 3012
+      }
     },
     "database": {
       "project_id": "REDACTED",
       "dataset_id": "REDACTED",
       "creds_path": "REDACTED"
     }
-  },
-  "validator": {
-    "host": "localhost",
-    "port": 3012
   },
   "mqtt": {
     "host": "REDACTED",

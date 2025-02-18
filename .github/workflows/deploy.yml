@@ -1,0 +1,56 @@
+name: deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Authenticate with Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACC_KEY }}
+      
+      - name: Configure gcloud
+        run: |
+          gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+          gcloud auth configure-docker us-docker.pkg.dev
+      
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gridstream/batcher .
+          docker push us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gridstream/batcher
+      
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy batcher-service \
+            --image us-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/gridstream/batcher \
+            --platform managed \
+            --region ${{ secrets.GCP_REGION }} \
+            --no-allow-unauthenticated \
+            --min-instances=1 \
+            --max-instances=10 \
+            --memory=512Mi \
+            --cpu=1 \
+            --cpu-throttling \
+            --set-env-vars "GO_ENV=production" \
+            --set-env-vars "CONFIG_PATH=/etc/batcher/config.json" \
+            --update-secrets=/secrets/bigquery/credentials.json=CREDS_PATH_SECRET:latest \
+            --update-secrets=/etc/batcher/config.json=BATCHER_STREAM_CONFIG_SECRET:latest
+
+  tag:
+    name: tag
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create tag
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
