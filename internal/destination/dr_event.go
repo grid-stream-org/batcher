@@ -53,7 +53,9 @@ func (d *drEventDestination) Add(ctx context.Context, data any) error {
 }
 
 func (d *drEventDestination) Close() error {
-	d.buf.Stop()
+	if err := d.buf.Stop(); err != nil {
+		return errors.WithStack(err)
+	}
 
 	if err := d.client.Close(); err != nil {
 		return errors.WithStack(err)
