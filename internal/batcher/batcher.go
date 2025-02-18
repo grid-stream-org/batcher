@@ -9,7 +9,6 @@ import (
 	"github.com/grid-stream-org/batcher/internal/mqtt"
 	"github.com/grid-stream-org/batcher/internal/task"
 	"github.com/grid-stream-org/go-commons/pkg/eventbus"
-	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 )
@@ -18,14 +17,13 @@ type Batcher struct {
 	cfg  *config.Config
 	dest destination.Destination
 	tp   *task.TaskPool
-	vc   validator.ValidatorClient
 	mqtt *mqtt.Client
 	eb   eventbus.EventBus
 	log  *slog.Logger
 }
 
-func New(ctx context.Context, cfg *config.Config, vc validator.ValidatorClient, log *slog.Logger) (*Batcher, error) {
-	dest, err := destination.NewDestination(ctx, cfg.Destination, vc, log)
+func New(ctx context.Context, cfg *config.Config, log *slog.Logger) (*Batcher, error) {
+	dest, err := destination.NewDestination(ctx, cfg.Destination, log)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -43,7 +41,6 @@ func New(ctx context.Context, cfg *config.Config, vc validator.ValidatorClient, 
 		cfg:  cfg,
 		dest: dest,
 		tp:   tp,
-		vc:   vc,
 		mqtt: mqtt,
 		eb:   eb,
 		log:  log.With("component", "batcher"),
@@ -113,11 +110,6 @@ func (b *Batcher) Stop(ctx context.Context) error {
 
 	// Close the destination
 	if err := b.dest.Close(); err != nil {
-		return errors.WithStack(err)
-	}
-
-	// Close validator connection
-	if err := b.vc.Close(); err != nil {
 		return errors.WithStack(err)
 	}
 

@@ -32,7 +32,11 @@ type Buffer struct {
 	done      chan struct{}
 }
 
-func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, log *slog.Logger) *Buffer {
+func New(ctx context.Context, cfg *config.Buffer, flushFunc FlushFunc, log *slog.Logger) (*Buffer, error) {
+	vc, err := validator.New(ctx, cfg.Validator, log)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
 	buf := &Buffer{
 		cfg:       cfg,
 		data:      make([]outcome.Outcome, 0),
@@ -43,7 +47,7 @@ func New(cfg *config.Buffer, flushFunc FlushFunc, vc validator.ValidatorClient, 
 		done:      make(chan struct{}),
 	}
 	log.Info("buffer initialized", "start_time", cfg.StartTime.Format(time.RFC3339), "interval", cfg.Interval, "offset", cfg.Offset)
-	return buf
+	return buf, nil
 }
 
 func (b *Buffer) Add(ctx context.Context, data *outcome.Outcome) {
@@ -82,8 +86,13 @@ func (b *Buffer) autoFlush(ctx context.Context) {
 	}
 }
 
-func (b *Buffer) Stop() {
+func (b *Buffer) Stop() error {
 	<-b.done
+	// Close validator connection
+	if err := b.vc.Close(); err != nil {
+		return errors.WithStack(err)
+	}
+	return nil
 }
 
 func (b *Buffer) Flush(parentCtx context.Context) error {

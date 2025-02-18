@@ -21,3 +21,9 @@ gen/
 
 # Output files
 out/
+
+# Mac 
+.DS_Store
+
+# Local keys
+configs/grid-stream-*.json

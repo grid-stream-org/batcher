@@ -12,7 +12,6 @@ import (
 	"github.com/grid-stream-org/batcher/metrics"
 	"github.com/grid-stream-org/go-commons/pkg/logger"
 	"github.com/grid-stream-org/go-commons/pkg/sigctx"
-	"github.com/grid-stream-org/go-commons/pkg/validator"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/multierr"
@@ -50,14 +49,8 @@ func run() (err error) {
 	http.Handle("/metrics", promhttp.Handler())
 	go metricsListenAndServe(log)
 
-	// Create validator client
-	validatorClient, err := validator.New(ctx, cfg.Validator, log)
-	if err != nil {
-		return err
-	}
-
 	// Create batcher
-	batcher, err := batcher.New(ctx, cfg, validatorClient, log)
+	batcher, err := batcher.New(ctx, cfg, log)
 	if err != nil {
 		return err
 	}

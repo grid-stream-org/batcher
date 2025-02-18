@@ -12,14 +12,12 @@ import (
 
 type FactoryTestSuite struct {
 	suite.Suite
-	ctx    context.Context
-	mockVC *MockValidatorClient
-	log    *slog.Logger
+	ctx context.Context
+	log *slog.Logger
 }
 
 func (s *FactoryTestSuite) SetupTest() {
 	s.ctx = context.Background()
-	s.mockVC = new(MockValidatorClient)
 	s.log = slog.Default()
 }
 
@@ -57,7 +55,7 @@ func (s *FactoryTestSuite) TestNewDestination() {
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			dest, err := NewDestination(s.ctx, tc.cfg, s.mockVC, s.log)
+			dest, err := NewDestination(s.ctx, tc.cfg, s.log)
 			if tc.expectError {
 				s.Error(err)
 				s.Nil(dest)
