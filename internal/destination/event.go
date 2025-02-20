@@ -12,21 +12,21 @@ import (
 	"github.com/pkg/errors"
 )
 
-type drEventDestination struct {
+type eventDestination struct {
 	client bqclient.BQClient
 	buf    *buffer.Buffer
 	log    *slog.Logger
 }
 
-func newDREventDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
+func newEventDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
 	client, err := bqclient.New(ctx, cfg.Database)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	d := &drEventDestination{
+	d := &eventDestination{
 		client: client,
-		log:    log.With("component", "dr_event_destination"),
+		log:    log.With("component", "event_destination"),
 	}
 
 	buf, err := buffer.New(ctx, cfg.Buffer, d.flushFunc, log)
@@ -39,7 +39,7 @@ func newDREventDestination(ctx context.Context, cfg *config.Destination, log *sl
 	return d, nil
 }
 
-func (d *drEventDestination) Add(ctx context.Context, data any) error {
+func (d *eventDestination) Add(ctx context.Context, data any) error {
 	outcome, ok := data.(*outcome.Outcome)
 	if !ok {
 		return errors.Errorf("expected *outcome.Outcome, got %T", data)
@@ -48,7 +48,7 @@ func (d *drEventDestination) Add(ctx context.Context, data any) error {
 	return nil
 }
 
-func (d *drEventDestination) Close() error {
+func (d *eventDestination) Close() error {
 	if err := d.buf.Stop(); err != nil {
 		return errors.WithStack(err)
 	}
@@ -57,11 +57,11 @@ func (d *drEventDestination) Close() error {
 		return errors.WithStack(err)
 	}
 
-	d.log.Info("dr_event destination closed")
+	d.log.Info("event destination closed")
 	return nil
 }
 
-func (d *drEventDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
+func (d *eventDestination) flushFunc(ctx context.Context, data *buffer.FlushOutcome) error {
 	if len(data.Outcomes) == 0 {
 		d.log.Debug("no outcomes to flush")
 		return nil

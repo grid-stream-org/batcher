@@ -10,8 +10,8 @@ import (
 
 func NewDestination(ctx context.Context, cfg *config.Destination, log *slog.Logger) (Destination, error) {
 	switch cfg.Type {
-	case "dr_event":
-		return newDREventDestination(ctx, cfg, log)
+	case "event":
+		return newEventDestination(ctx, cfg, log)
 	case "stdout":
 		return newStdoutDestination(log)
 	case "stream":
