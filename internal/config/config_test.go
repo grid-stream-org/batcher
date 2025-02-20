@@ -24,7 +24,7 @@ func (s *ConfigTestSuite) newValidConfig() *Config {
 			Capacity:   100,
 		},
 		Destination: &Destination{
-			Type: "dr_event",
+			Type: "event",
 			Database: &bqclient.Config{
 				ProjectID: "test-project",
 				DatasetID: "test-dataset",
@@ -153,9 +153,9 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 			errorMsg:    "database configuration required",
 		},
 		{
-			name: "dr_event type without buffer",
+			name: "event type without buffer",
 			modify: func(d *Destination) {
-				d.Type = "dr_event"
+				d.Type = "event"
 				d.Buffer = nil
 			},
 			expectError: true,
@@ -164,7 +164,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer zero interval",
 			modify: func(d *Destination) {
-				d.Type = "dr_event"
+				d.Type = "event"
 				d.Buffer.Interval = 0
 			},
 			expectError: true,
@@ -173,7 +173,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer negative offset",
 			modify: func(d *Destination) {
-				d.Type = "dr_event"
+				d.Type = "event"
 				d.Buffer.Offset = -1 * time.Second
 			},
 			expectError: true,
@@ -182,7 +182,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer offset equals interval",
 			modify: func(d *Destination) {
-				d.Type = "dr_event"
+				d.Type = "event"
 				d.Buffer.Interval = time.Second
 				d.Buffer.Offset = time.Second
 			},
@@ -192,7 +192,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 		{
 			name: "buffer zero start time",
 			modify: func(d *Destination) {
-				d.Type = "dr_event"
+				d.Type = "event"
 				d.Buffer.StartTime = time.Time{}
 			},
 			expectError: true,
@@ -220,7 +220,7 @@ func (s *ConfigTestSuite) TestDestinationValidation() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			dest := &Destination{
-				Type: "dr_event",
+				Type: "event",
 				Database: &bqclient.Config{
 					ProjectID: "test-project",
 					DatasetID: "test-dataset",

@@ -39,7 +39,7 @@ type Destination struct {
 }
 
 type Buffer struct {
-	StartTime time.Time         `koanf:"start_time"`
+	StartTime time.Time
 	Interval  time.Duration     `koanf:"interval"`
 	Offset    time.Duration     `koanf:"offset"`
 	Validator *validator.Config `koanf:"validator"`
@@ -108,7 +108,7 @@ func (d *Destination) validate() error {
 	}
 
 	validTypes := []string{
-		"dr_event",
+		"event",
 		"stdout",
 		"stream",
 	}
@@ -116,7 +116,7 @@ func (d *Destination) validate() error {
 		return errors.Errorf("invalid destination type: %s", d.Type)
 	}
 
-	if d.Type == "dr_event" {
+	if d.Type == "event" {
 		if err := d.Database.Validate(); err != nil {
 			return errors.WithStack(err)
 		}
@@ -139,6 +139,19 @@ func (b *Buffer) validate() error {
 	if b == nil {
 		return errors.New("buffer configuration required")
 	}
+
+	startTime := os.Getenv("BUFFER_START_TIME")
+	if startTime == "" {
+		return errors.New("buffer start time not set in environment and is required")
+	}
+
+	t, err := time.Parse(time.RFC3339, startTime)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
+	b.StartTime = t
+
 	if b.Interval <= 0 {
 		return errors.New("buffer interval must be positive")
 	}
