@@ -1,23 +1,10 @@
 {
-  "batcher": {
-     "timeout": "6h"
-  },
   "pool": {
     "num_workers": 5,
     "capacity": 300
   },
   "destination": {
-    "type": "dr_event",
-    "buffer": {
-      "enabled": false,
-      "start_time": "2025-01-09T19:55:00Z",
-      "interval": "5m",
-      "offset": "10s",
-      "validator": {
-        "host": "localhost",
-        "port": 3012
-      }
-    },
+    "type": "stream",
     "database": {
       "project_id": "REDACTED",
       "dataset_id": "REDACTED",
@@ -26,15 +13,15 @@
   },
   "mqtt": {
     "host": "REDACTED",
-    "port": 8883,
+    "port": 0,
     "username": "REDACTED",
     "password": "REDACTED",
-    "qos": 2
+    "qos": 2,
+    "topic": "REDACTED"
   },
   "log": {
-    "level": "DEBUG",
+    "level": "INFO",
     "format": "json",
     "output": "stdout"
   }
 }
-

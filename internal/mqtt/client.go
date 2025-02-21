@@ -25,7 +25,7 @@ type Client struct {
 func NewClient(cfg *config.MQTT, eb eventbus.EventBus, log *slog.Logger) (*Client, error) {
 	c := &Client{
 		eventBus:   eb,
-		topic:      "$share/batcher/projects/#",
+		topic:      cfg.Topic,
 		cfg:        cfg,
 		subscribed: false,
 		log:        log.With("component", "mqtt_client"),

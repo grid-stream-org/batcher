@@ -51,6 +51,7 @@ type MQTT struct {
 	Username string `koanf:"username"`
 	Password string `koanf:"password"`
 	QoS      int    `koanf:"qos"`
+	Topic    string `koanf:"qos"`
 }
 
 func Load() (*Config, error) {
@@ -178,5 +179,10 @@ func (m *MQTT) validate() error {
 	if m.QoS < 0 || m.QoS > 2 {
 		return errors.New("qos must be between 0 and 2")
 	}
+
+	if m.Topic == "" {
+		return errors.New("topic is required")
+	}
+
 	return nil
 }

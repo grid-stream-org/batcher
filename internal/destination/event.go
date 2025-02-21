@@ -7,7 +7,6 @@ import (
 	"github.com/grid-stream-org/batcher/internal/buffer"
 	"github.com/grid-stream-org/batcher/internal/config"
 	"github.com/grid-stream-org/batcher/internal/outcome"
-	"github.com/grid-stream-org/batcher/internal/types"
 	"github.com/grid-stream-org/go-commons/pkg/bqclient"
 	"github.com/pkg/errors"
 )
@@ -67,28 +66,10 @@ func (d *eventDestination) flushFunc(ctx context.Context, data *buffer.FlushOutc
 		return nil
 	}
 
-	derCount := 0
-	for _, outcome := range data.Outcomes {
-		derCount += len(outcome.Data)
-	}
-	if derCount == 0 {
-		d.log.Debug("no DER data to flush")
-		return nil
-	}
-
-	derData := make([]types.RealTimeDERData, 0, derCount)
-	for _, outcome := range data.Outcomes {
-		derData = append(derData, outcome.Data...)
-	}
-
-	if err := d.client.Put(ctx, "der_data", derData); err != nil {
-		return errors.WithStack(err)
-	}
-
 	if err := d.client.Put(ctx, "project_averages", data.AvgOutputs); err != nil {
 		return errors.WithStack(err)
 	}
 
-	d.log.Debug("successfully flushed data to BigQuery", "der_records", len(derData), "avg_records", len(data.AvgOutputs))
+	d.log.Debug("successfully flushed data to bigquery", "avg_records", len(data.AvgOutputs))
 	return nil
 }
