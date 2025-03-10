@@ -51,7 +51,7 @@ type MQTT struct {
 	Username string `koanf:"username"`
 	Password string `koanf:"password"`
 	QoS      int    `koanf:"qos"`
-	Topic    string `koanf:"qos"`
+	Topic    string `koanf:"topic"`
 }
 
 func Load() (*Config, error) {
