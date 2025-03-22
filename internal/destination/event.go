@@ -66,7 +66,7 @@ func (d *eventDestination) flushFunc(ctx context.Context, data *buffer.FlushOutc
 		return nil
 	}
 
-	if err := d.client.Put(ctx, "project_averages", data.AvgOutputs); err != nil {
+	if err := d.client.StreamPut(ctx, "project_averages", data.AvgOutputs); err != nil {
 		return errors.WithStack(err)
 	}
 
