@@ -246,7 +246,7 @@ func (s *AvgCacheTestSuite) TestReset() {
 	s.Len(s.cache.items, 2)
 
 	// Reset the cache
-	s.cache.Reset()
+	s.cache.Reset(s.startTime, s.endTime)
 	s.Empty(s.cache.items)
 
 	// Add new data after reset

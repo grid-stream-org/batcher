@@ -99,8 +99,13 @@ func (b *Buffer) Flush(parentCtx context.Context) error {
 	timeoutCtx, timeoutCancel := context.WithTimeout(parentCtx, b.cfg.Offset)
 	defer timeoutCancel()
 
+	currentEndTime := b.avgCache.endTime
+	nextStartTime := currentEndTime
+	nextEndTime := nextStartTime.Add(b.cfg.Interval)
+
 	b.mu.Lock()
 	if len(b.data) == 0 {
+		b.avgCache.Reset(nextStartTime, nextEndTime)
 		b.mu.Unlock()
 		b.log.Info("nothing to flush")
 		return nil
@@ -144,7 +149,7 @@ func (b *Buffer) Flush(parentCtx context.Context) error {
 
 	wg.Wait()
 
-	b.avgCache.Reset()
+	b.avgCache.Reset(nextStartTime, nextEndTime)
 
 	if validatorErr != nil || flushErr != nil {
 		return errors.WithStack(multierr.Combine(validatorErr, flushErr))

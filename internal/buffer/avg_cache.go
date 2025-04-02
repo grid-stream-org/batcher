@@ -67,9 +67,11 @@ func (ac *AvgCache) GetProtoOutputs() []*pb.AverageOutput {
 	return outputs
 }
 
-func (ac *AvgCache) Reset() {
+func (ac *AvgCache) Reset(nextStartTime time.Time, nextEndTime time.Time) {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
+	ac.startTime = nextStartTime
+	ac.endTime = nextEndTime
 	for k := range ac.items {
 		delete(ac.items, k)
 	}
