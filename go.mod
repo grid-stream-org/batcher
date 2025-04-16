@@ -7,7 +7,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grid-stream-org/go-commons v0.2.0
 	github.com/grid-stream-org/grid-stream-protos v0.4.0
-	github.com/knadh/koanf/parsers/json v0.1.0
+	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/providers/file v1.1.2
 	github.com/knadh/koanf/v2 v2.1.2
 	github.com/patrickmn/go-cache v2.1.0+incompatible
